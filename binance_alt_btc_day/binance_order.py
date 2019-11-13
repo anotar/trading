@@ -15,8 +15,18 @@ class BinanceOrder:
         self.binance = ccxt.binance(
             {'apiKey': api_key,
              'secret': api_secret,
-             'enableRateLimit': True,
+             'enableRateLimit': False,
              })
+        # market_data = self.binance.load_markets()
+        # pprint(dir(self.binance))
+
+        for i in range(1,10):
+            self.binance.load_markets()
+            self.binance.fetch_ohlcv('BTC/USDT', '1d')
+            exchange_data = self.binance.publicGetExchangeInfo()
+        print(exchange_data.keys())
+        pprint(exchange_data['rateLimits'])
+        pprint(exchange_data['exchangeFilters'])
 
 
 def setup_logger(name):

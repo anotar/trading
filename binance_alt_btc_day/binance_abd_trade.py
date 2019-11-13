@@ -15,8 +15,22 @@ class BinanceAltBtcDayTrade:
         self.logger = setup_logger('binance_abd_trade')
         self.logger.info("Setting Binance Alt/Btc Pair Trading Module...")
         self.bo = BinanceOrder(api_key, api_secret)
+        
+    # 분봉으로 거래
 
+    # 코인 가격과 거래량 수집
 
+    # 비트 조건 확인 후 매도 매수 조건에 따라 거래
+    
+    # 현재 진행중인 코인이 5개 미만일 떄
+    # 피봇아래거나 거래량이 적거나 가격이 지나치게 낮거나 Stable 페어인 ALT/BTC 페어 제거
+    # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
+    # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
+    
+    # 한개 이상의 진행중인 코인이 있을 떄
+    # 시장가가 익절가 이상일 경우 익절 오더 배치
+    # 손절가에 Stop Limit 오더 배치
+    
 
 
 def setup_logger(name):
