@@ -50,6 +50,7 @@ class BinanceAltBtcDayTrade:
             sleep(0.1)
         self.logger.info('Successfully Stopped ABD Trade Loop')
 
+    def check_seconds(self, dict_key, time, time_type='second', time_sync_offset=1):
         if time_type == 'minute':
             time *= 60
         elif time_type == 'hour':
