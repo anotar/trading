@@ -17,6 +17,9 @@ class BinanceOrder:
              'secret': api_secret,
              'enableRateLimit': False,
              })
+        self.logger.info('Binance Order Module Setup Completed')
+
+    def test_function(self):
         # market_data = self.binance.load_markets()
         # pprint(dir(self.binance))
 
@@ -46,3 +49,4 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
+    bo.test_function()

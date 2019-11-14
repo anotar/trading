@@ -13,8 +13,67 @@ class BinanceAltBtcDayTrade:
     def __init__(self, api_key, api_secret):
         # basic setup
         self.logger = setup_logger('binance_abd_trade')
-        self.logger.info("Setting Binance Alt/Btc Pair Trading Module...")
+        self.logger.info("Setting Binance Alt/BTC Pair Trading Module...")
         self.bo = BinanceOrder(api_key, api_secret)
+
+        self.trade_loop_interval = 1  # seconds
+        self.trade_loop_checker = True
+        self.trade_thread = threading.Thread()
+        self.trade_loop_prev_time = {'hour_trade': 0,
+                                     'minute_trade': 0.
+                                     }
+
+        self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
+
+    def start_trade(self):
+        self.logger.info('Setting up ABD Trade Loop...')
+        self.trade_loop_checker = True
+
+        def trade_loop():
+            sleep(0.1)
+            while self.trade_loop_checker:
+                try:
+                    self.trade()
+                except Exception:
+                    self.logger.exception('Caught Error in ABD Trade Loop')
+                sleep(self.trade_loop_interval)
+
+        self.trade_thread = threading.Thread(target=trade_loop)
+        self.trade_thread.daemon = True
+        self.trade_thread.start()
+        self.logger.info('Start ABD Trade Loop')
+
+    def stop_trade(self):
+        self.trade_loop_checker = False
+        # TODO: delete all pending order
+        while self.trade_thread.is_alive():
+            sleep(0.1)
+        self.logger.info('Successfully Stopped ABD Trade Loop')
+
+        if time_type == 'minute':
+            time *= 60
+        elif time_type == 'hour':
+            time *= 60 * 60
+        quotient_seconds = (self.bo.binance.seconds() - time_sync_offset) // time
+        if quotient_seconds != self.trade_loop_prev_time[dict_key]:
+            self.trade_loop_prev_time[dict_key] = quotient_seconds
+            return True
+        else:
+            return False
+
+    def trade(self):
+        if self.check_seconds('hour_trade', 1, time_type='hour'):
+            self.hour_trade()
+
+        if self.check_seconds('minute_trade', 1, time_type='hour'):
+            self.minute_trade()
+
+    def hour_trade(self):
+        self.logger.info('Starting Hour Trade...')
+
+    def minute_trade(self):
+        self.logger.info('Starting Minute Trade...')
+
     # 1분에 한번 씩 실행
     # 한개 이상의 진행중인 코인이 있을 떄
     # 진행중인 코인 가격과 오더북 수집
@@ -49,3 +108,8 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     binanceABDT = BinanceAltBtcDayTrade(api_test['api_key'], api_test['api_secret'])
+
+    binanceABDT.start_trade()
+    sleep(10)
+    binanceABDT.stop_trade()
+
