@@ -3,6 +3,7 @@ import ccxt
 import os.path
 from pprint import pprint
 import pandas as pd
+from datetime import datetime, timezone
 from time import sleep
 import math
 import json
@@ -19,17 +20,60 @@ class BinanceOrder:
              })
         self.logger.info('Binance Order Module Setup Completed')
 
-    def test_function(self):
-        # market_data = self.binance.load_markets()
-        # pprint(dir(self.binance))
-
-        for i in range(1,10):
-            self.binance.load_markets()
-            self.binance.fetch_ohlcv('BTC/USDT', '1d')
-            exchange_data = self.binance.publicGetExchangeInfo()
+    def show_basic_info(self):
+        print('Exchange Status')
+        print(self.binance.fetch_status())
+        print('\nExchange Data:')
+        exchange_data = self.binance.publicGetExchangeInfo()
         print(exchange_data.keys())
+        print('rateLimit:')
         pprint(exchange_data['rateLimits'])
-        pprint(exchange_data['exchangeFilters'])
+        print('\nAPIs sample:')
+        pprint(dir(self.binance)[len(dir(self.binance))-10:])
+
+    def show_basic_market_info(self):
+        market_data = self.binance.load_markets()
+        pprint(market_data['BTC/USDT'])
+        ohlcv = bo.get_ohlcv('BTC/UDST', '1m')
+        # print(ohlcv)
+        # pprint(self.binance.fetch_ticker('BTC/USDT'))
+
+    def check_exchange_status(self):
+        exchange_status = self.binance.fetch_status()
+        status = exchange_status['status']
+        if status == 'ok':
+            return True
+        else:
+            return False
+
+    def check_ticker_status(self, symbol):
+        market_data = self.binance.load_markets()
+        if symbol not in market_data.keys():
+            return False
+
+        ticker_data = market_data[symbol]
+        if ticker_data['active']:
+            return True
+        else:
+            return False
+
+    def get_ohlcv(self, symbol, interval):
+        ohlcv_original = self.binance.fetch_ohlcv('BTC/USDT', '1M')
+        ohlcv = pd.DataFrame()
+        ohlcv['timestamp'] = [int(ohlcv_list[0]/1000) for ohlcv_list in ohlcv_original]
+        ohlcv['open'] = [ohlcv_list[1] for ohlcv_list in ohlcv_original]
+        ohlcv['high'] = [ohlcv_list[2] for ohlcv_list in ohlcv_original]
+        ohlcv['low'] = [ohlcv_list[3] for ohlcv_list in ohlcv_original]
+        ohlcv['close'] = [ohlcv_list[4] for ohlcv_list in ohlcv_original]
+        ohlcv['volume'] = [ohlcv_list[5] for ohlcv_list in ohlcv_original]
+
+        utc_timezone = timezone.utc
+        ohlcv['time'] = [datetime.fromtimestamp(timestamp, utc_timezone) for timestamp in ohlcv['timestamp']]
+        ohlcv['year'] = [time.year for time in ohlcv['time']]
+        ohlcv['month'] = [time.month for time in ohlcv['time']]
+        ohlcv['day'] = [time.day for time in ohlcv['time']]
+        ohlcv['hour'] = [time.hour for time in ohlcv['time']]
+        return ohlcv
 
 
 def setup_logger(name):
@@ -49,4 +93,9 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
-    bo.test_function()
+    bo.show_basic_info()
+    # bo.show_basic_market_info()
+
+    # Test function
+    print('Exchange Status:', bo.check_exchange_status())
+    print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
