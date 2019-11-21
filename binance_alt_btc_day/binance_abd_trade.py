@@ -19,9 +19,12 @@ class BinanceAltBtcDayTrade:
         self.trade_loop_interval = 1  # seconds
         self.trade_loop_checker = True
         self.trade_thread = threading.Thread()
-        self.trade_loop_prev_time = {'hour_trade': 0,
-                                     'minute_trade': 0,
+        self.trade_loop_prev_time = {'btc_trade': 0,
+                                     'alt_trade': 0,
                                      }
+
+        self.btc_trade_data = {'prev_month': datetime.utcnow().month,
+                               }
 
         self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
 
@@ -41,7 +44,7 @@ class BinanceAltBtcDayTrade:
         self.trade_thread = threading.Thread(target=trade_loop)
         self.trade_thread.daemon = True
         self.trade_thread.start()
-        self.logger.info('Start ABD Trade Loop')
+        self.logger.info('Setup Completed. Start ABD Trade Loop')
 
     def stop_trade(self):
         self.trade_loop_checker = False
@@ -63,29 +66,50 @@ class BinanceAltBtcDayTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('hour_trade', 1, time_type='hour'):
-            self.hour_trade()
+        if self.check_seconds('btc_trade', 1, time_type='hour'):
+            self.btc_trade()
 
-        if self.check_seconds('minute_trade', 1, time_type='minute'):
-            self.minute_trade()
+        if self.check_seconds('alt_trade', 1, time_type='minute'):
+            self.alt_trade()
 
-    def hour_trade(self):
-        self.logger.info('Starting Hour Trade...')
-        # 비트 코인 가격수집
-        # 비트 조건 확인 후 매도 매수 조건에 따라 거래
-        # 매도 시 비트 우선 매도
+    def btc_trade(self, symbol='BTC/USDT'):
+        self.logger.info('Starting BTC Trade...')
+        pivot = self.bo.get_yearly_pivot(symbol)
+        btc_info = self.bo.get_ticker_info(symbol)
+        last_price = btc_info['last_price']
+        hourly_interval = 3600
+        if self.bo.binance.seconds() - hourly_interval > btc_info['timestamp']:
+            return False
+
+        month_now = datetime.utcnow().month
+        if last_price < pivot['s1']:
+            self.logger.info(f'{symbol}: Last Price is under Pivot S1')
+            # sell all at market price
+        elif last_price < pivot['p']:
+            if self.btc_trade_data['prev_month'] != month_now:
+                self.btc_trade_data['prev_month'] = month_now
+                self.logger.info(f'{symbol}: Last Price is under Pivot P')
+                # sell all at market price
+            else:
+                self.logger.info(f'{symbol}: Last Price is under Pivot P but not new month')
+        else:
+            self.logger.info(f'{symbol}: Last Price is more than Pivot P')
+            # buy BTC
+
+        self.logger.info('Exit BTC Trade')
+
+    def alt_trade(self):
+        self.logger.info('Starting Alt Trade...')
         # 현재 진행중인 코인이 5개 미만일 떄
         # 알트코인 가격과 거래량 수집
         # 피봇아래거나 거래량이 적거나 가격이 지나치게 낮거나 Stable 페어인 ALT/BTC 페어 제거
         # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
         # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
-
-    def minute_trade(self):
-        self.logger.info('Starting Minute Trade...')
         # 한개 이상의 진행중인 코인이 있을 떄
         # 진행중인 코인 가격과 오더북 수집
         # 시장가가 익절가 이상일 경우 익절 오더 배치
         # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+        self.logger.info('Exit Alt Trade')
 
 
 def setup_logger(name):
@@ -106,7 +130,9 @@ if __name__ == '__main__':
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     binanceABDT = BinanceAltBtcDayTrade(api_test['api_key'], api_test['api_secret'])
 
+    print('start trade')
     binanceABDT.start_trade()
-    sleep(10)
+    sleep(100)
+    print('stop trade')
     binanceABDT.stop_trade()
 

@@ -1,7 +1,7 @@
 [거래방법]
-Altcoin/BTC Pair를 기본으로 거래
+비트코인 매수시 Altcoin/BTC Pair로 거래
+비트코인 매도시 Altcoin/USDT Pair로 거래
 비트코인 거래 알고리즘으로 BTC 매수 매도 결정
-BTC기준 매도일 경우 모든 알트 또한 동일 비율로 매도
 
 
 [비트코인]

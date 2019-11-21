@@ -4,6 +4,7 @@ import os.path
 from pprint import pprint
 import pandas as pd
 from datetime import datetime, timezone
+from decimal import *
 from time import sleep
 import math
 import json
@@ -34,6 +35,7 @@ class BinanceOrder:
     def show_basic_market_info(self):
         market_data = self.binance.load_markets()
         pprint(market_data['BTC/USDT'])
+        pprint(market_data.keys())
         ohlcv = bo.get_ohlcv('BTC/UDST', '1m')
         # print(ohlcv)
         # pprint(self.binance.fetch_ticker('BTC/USDT'))
@@ -75,6 +77,48 @@ class BinanceOrder:
         ohlcv['hour'] = [time.hour for time in ohlcv['time']]
         return ohlcv
 
+    @staticmethod
+    def get_pivot(high, low, close, fibonacci=(0.236, 0.618, 1)):
+        pivot = dict()
+        pivot['p'] = (high + low + close) / 3.0
+        pivot['r1'] = pivot['p'] + (high - low) * fibonacci[0]
+        pivot['s1'] = pivot['p'] - (high - low) * fibonacci[0]
+        pivot['r2'] = pivot['p'] + (high - low) * fibonacci[1]
+        pivot['s2'] = pivot['p'] - (high - low) * fibonacci[1]
+        pivot['r3'] = pivot['p'] + (high - low) * fibonacci[2]
+        pivot['s3'] = pivot['p'] - (high - low) * fibonacci[2]
+        for key in pivot:
+            pivot[key] = round(float(pivot[key]), 2)
+        return pivot
+
+    def get_yearly_pivot(self, symbol):
+        ohlcv = self.get_ohlcv(symbol, '1m')
+        if ohlcv.loc[ohlcv['year'] != datetime.utcnow().year].empty:
+            return False
+        ohlcv = ohlcv.loc[ohlcv['year'] == datetime.utcnow().year-1]
+        high = ohlcv['high'].max()
+        low = ohlcv['low'].min()
+        close = ohlcv['close'].iloc[-1]
+        pivot = self.get_pivot(high, low, close)
+        return pivot
+
+    def get_monthly_pivot(self, symbol):
+        ohlcv = self.get_ohlcv(symbol, '1m')
+        if not len(ohlcv) > 1:
+            return False
+        high = ohlcv['high'].iloc[-2]
+        low = ohlcv['low'].iloc[-2]
+        close = ohlcv['close'].iloc[-2]
+        pivot = self.get_pivot(high, low, close)
+        return pivot
+
+    def get_ticker_info(self, symbol):
+        ticker_data = self.binance.fetch_ticker(symbol)
+        ticker_info = dict()
+        ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
+        ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
+        return ticker_info
+
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'
@@ -93,9 +137,12 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
-    bo.show_basic_info()
+    # bo.show_basic_info()
     # bo.show_basic_market_info()
 
     # Test function
-    print('Exchange Status:', bo.check_exchange_status())
-    print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
+    # print('Exchange Status:', bo.check_exchange_status())
+    # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
+    # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
+    # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
+    pprint(bo.get_ticker_info('YOYOW/BTC'))
