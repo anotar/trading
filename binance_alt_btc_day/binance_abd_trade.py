@@ -24,6 +24,7 @@ class BinanceAltBtcDayTrade:
                                      }
 
         self.btc_trade_data = {'prev_month': datetime.utcnow().month,
+                               'btc_status': 'buy',
                                }
 
         self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
@@ -85,17 +86,24 @@ class BinanceAltBtcDayTrade:
         if last_price < pivot['s1']:
             self.logger.info(f'{symbol}: Last Price is under Pivot S1')
             # sell all at market price
+
+            self.btc_trade_data['btc_status'] = 'sell'
         elif last_price < pivot['p']:
             if self.btc_trade_data['prev_month'] != month_now:
                 self.btc_trade_data['prev_month'] = month_now
                 self.logger.info(f'{symbol}: Last Price is under Pivot P')
+
                 # sell all at market price
+
+                self.btc_trade_data['btc_status'] = 'sell'
             else:
                 self.logger.info(f'{symbol}: Last Price is under Pivot P but not new month')
         else:
             self.logger.info(f'{symbol}: Last Price is more than Pivot P')
+
             # buy BTC
 
+            self.btc_trade_data['btc_status'] = 'buy'
         self.logger.info('Exit BTC Trade')
 
     def alt_trade(self):
@@ -125,7 +133,7 @@ def setup_logger(name):
 
 
 if __name__ == '__main__':
-    with open('api/binance_kjss970_naver.txt', 'r') as f:
+    with open('api/binance_ysjjah_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     binanceABDT = BinanceAltBtcDayTrade(api_test['api_key'], api_test['api_secret'])

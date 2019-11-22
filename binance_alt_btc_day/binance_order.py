@@ -114,10 +114,26 @@ class BinanceOrder:
 
     def get_ticker_info(self, symbol):
         ticker_data = self.binance.fetch_ticker(symbol)
+        market_data = self.binance.load_markets()
+
         ticker_info = dict()
         ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
         ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
+        for ticker_filter in market_data[symbol]['info']['filters']:
+            if ticker_filter['filterType'] == 'PRICE_FILTER':
+                ticker_info['tick_size'] = float(ticker_filter['tickSize'])
+        for ticker_filter in market_data[symbol]['info']['filters']:
+            if ticker_filter['filterType'] == 'LOT_SIZE':
+                ticker_info['step_size'] = float(ticker_filter['stepSize'])
         return ticker_info
+
+    def get_open_orders(self):
+        open_orders = self.binance.privateGetOpenOrders()
+        return open_orders
+
+    def get_open_oders_id(self):
+        open_orders = self.get_open_orders()
+        raise NotImplementedError
 
 
 def setup_logger(name):
@@ -133,7 +149,7 @@ def setup_logger(name):
 
 
 if __name__ == '__main__':
-    with open('api/binance_kjss970_naver.txt', 'r') as f:
+    with open('api/binance_ysjjah_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
@@ -145,4 +161,5 @@ if __name__ == '__main__':
     # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
-    pprint(bo.get_ticker_info('YOYOW/BTC'))
+    # pprint(bo.get_ticker_info('FET/BTC'))
+    # pprint(bo.get_open_orders())
