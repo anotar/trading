@@ -24,7 +24,7 @@ class BinanceAltBtcDayTrade:
                                      }
 
         self.btc_trade_data = {'prev_month': datetime.utcnow().month,
-                               'btc_status': 'buy',
+                               'btc_status': 'init',  # 'buy' or 'sell'
                                }
 
         self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
@@ -59,6 +59,8 @@ class BinanceAltBtcDayTrade:
             time *= 60
         elif time_type == 'hour':
             time *= 60 * 60
+        elif time_type == 'day':
+            time *= 60 * 60 * 24
         quotient_seconds = (self.bo.binance.seconds() - time_sync_offset) // time
         if quotient_seconds != self.trade_loop_prev_time[dict_key]:
             self.trade_loop_prev_time[dict_key] = quotient_seconds
@@ -85,25 +87,27 @@ class BinanceAltBtcDayTrade:
         month_now = datetime.utcnow().month
         if last_price < pivot['s1']:
             self.logger.info(f'{symbol}: Last Price is under Pivot S1')
-            # sell all at market price
-
-            self.btc_trade_data['btc_status'] = 'sell'
-        elif last_price < pivot['p']:
-            if self.btc_trade_data['prev_month'] != month_now:
-                self.btc_trade_data['prev_month'] = month_now
-                self.logger.info(f'{symbol}: Last Price is under Pivot P')
-
-                # sell all at market price
-
+            if self.btc_trade_data['btc_status'] is not 'sell':
+                self.logger.info(f'{symbol}: current btc status is not \'sell\'. start sell procedure')
+                self.sell_all_coin()
                 self.btc_trade_data['btc_status'] = 'sell'
-            else:
-                self.logger.info(f'{symbol}: Last Price is under Pivot P but not new month')
+        elif last_price < pivot['p']:
+            self.logger.info(f'{symbol}: Last Price is under Pivot P')
+            if self.btc_trade_data['btc_status'] is not 'sell':
+                self.logger.info(f'{symbol}: current btc status is not \'sell\'.')
+                if self.btc_trade_data['prev_month'] != month_now:
+                    self.logger.info(f'{symbol}: New month. Start sell procedure')
+                    self.btc_trade_data['prev_month'] = month_now
+                    self.sell_all_coin()
+                    self.btc_trade_data['btc_status'] = 'sell'
+                else:
+                    self.logger.info(f'{symbol}: Not new month. Passing under Pivot P trigger')
         else:
             self.logger.info(f'{symbol}: Last Price is more than Pivot P')
-
-            # buy BTC
-
-            self.btc_trade_data['btc_status'] = 'buy'
+            if self.btc_trade_data['btc_status'] is not 'buy':
+                self.logger.info(f'{symbol}: current btc status is not \'buy\'. start buy procedure')
+                self.buy_btc_all()
+                self.btc_trade_data['btc_status'] = 'buy'
         self.logger.info('Exit BTC Trade')
 
     def alt_trade(self):
@@ -118,6 +122,18 @@ class BinanceAltBtcDayTrade:
         # 시장가가 익절가 이상일 경우 익절 오더 배치
         # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
         self.logger.info('Exit Alt Trade')
+
+    def sell_all_coin(self):
+        pass
+        # cancel all order
+        # check balance
+        # sell all at market price
+
+    def buy_btc_all(self):
+        pass
+        # cancel all order
+        # check balance
+        # buy btc all
 
 
 def setup_logger(name):

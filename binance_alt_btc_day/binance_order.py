@@ -131,9 +131,20 @@ class BinanceOrder:
         open_orders = self.binance.privateGetOpenOrders()
         return open_orders
 
-    def get_open_oders_id(self):
+    def get_open_orders_id(self):
         open_orders = self.get_open_orders()
+        if open_orders:
+            return [open_order['orderId'] for open_order in open_orders]
+        else:
+            return []
+
+    def cancel_order(self, order_id, symbol):
         raise NotImplementedError
+        return self.binance.cancel_order(str(order_id), symbol)
+
+    def cancel_all_order(self):
+        raise NotImplementedError
+        pass
 
 
 def setup_logger(name):
@@ -163,3 +174,5 @@ if __name__ == '__main__':
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
     # pprint(bo.get_ticker_info('FET/BTC'))
     # pprint(bo.get_open_orders())
+    # print(bo.get_open_orders_id())
+    bo.cancel_order(822893643, 'BTCUSDT')
