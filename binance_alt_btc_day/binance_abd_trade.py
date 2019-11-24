@@ -89,6 +89,7 @@ class BinanceAltBtcDayTrade:
         last_price = btc_info['last_price']
         hourly_interval = 3600
         if self.bo.binance.seconds() - hourly_interval > btc_info['timestamp']:
+            self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
 
         month_now = datetime.utcnow().month
