@@ -60,7 +60,7 @@ class BinanceOrder:
             return False
 
     def get_ohlcv(self, symbol, interval):
-        ohlcv_original = self.binance.fetch_ohlcv('BTC/USDT', '1M')
+        ohlcv_original = self.binance.fetch_ohlcv(symbol, interval)
         ohlcv = pd.DataFrame()
         ohlcv['timestamp'] = [int(ohlcv_list[0]/1000) for ohlcv_list in ohlcv_original]
         ohlcv['open'] = [ohlcv_list[1] for ohlcv_list in ohlcv_original]
@@ -92,7 +92,7 @@ class BinanceOrder:
         return pivot
 
     def get_yearly_pivot(self, symbol):
-        ohlcv = self.get_ohlcv(symbol, '1m')
+        ohlcv = self.get_ohlcv(symbol, '1M')
         if ohlcv.loc[ohlcv['year'] != datetime.utcnow().year].empty:
             return False
         ohlcv = ohlcv.loc[ohlcv['year'] == datetime.utcnow().year-1]
@@ -103,7 +103,7 @@ class BinanceOrder:
         return pivot
 
     def get_monthly_pivot(self, symbol):
-        ohlcv = self.get_ohlcv(symbol, '1m')
+        ohlcv = self.get_ohlcv(symbol, '1M')
         if not len(ohlcv) > 1:
             return False
         high = ohlcv['high'].iloc[-2]
@@ -117,8 +117,11 @@ class BinanceOrder:
         market_data = self.binance.load_markets()
 
         ticker_info = dict()
+        ticker_info['ask'] = ticker_data['ask']
+        ticker_info['bid'] = ticker_data['bid']
         ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
         ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
+        ticker_info['internal_symbol'] = ticker_data['info']['symbol']
         for ticker_filter in market_data[symbol]['info']['filters']:
             if ticker_filter['filterType'] == 'PRICE_FILTER':
                 ticker_info['tick_size'] = float(ticker_filter['tickSize'])
@@ -131,20 +134,73 @@ class BinanceOrder:
         open_orders = self.binance.privateGetOpenOrders()
         return open_orders
 
-    def get_open_orders_id(self):
+    def get_open_orders_info(self):
         open_orders = self.get_open_orders()
         if open_orders:
-            return [open_order['orderId'] for open_order in open_orders]
+            return [{'order_id': open_order['orderId'],
+                     'order_list_id': open_order['orderListId'],
+                     'internal_symbol': open_order['symbol']}
+                    for open_order in open_orders]
         else:
             return []
 
-    def cancel_order(self, order_id, symbol):
-        raise NotImplementedError
-        return self.binance.cancel_order(str(order_id), symbol)
+    def cancel_order(self, symbol, order_id, order_list_id=-1, internal_symbol=False):
+        if order_list_id != -1:
+            param = {'symbol': symbol, 'orderListId': order_list_id}
+            return self.binance.privateDeleteOrderList(param)
+        elif internal_symbol:
+            param = {'symbol': symbol, 'orderId': order_id}
+            return self.binance.privateDeleteOrder(param)
+        else:
+            return self.binance.cancel_order(str(order_id), symbol)
 
     def cancel_all_order(self):
-        raise NotImplementedError
-        pass
+        self.logger.info('Cancel all order')
+        orders_info = self.get_open_orders_info()
+        result_list = []
+        order_list_id_list = []
+
+        for order_info in orders_info:
+            internal_symbol = order_info['internal_symbol']
+            order_id = order_info['order_id']
+            order_list_id = order_info['order_list_id']
+            if order_list_id in order_list_id_list:
+                continue
+            elif order_list_id != -1:
+                order_list_id_list.append(order_list_id)
+            result = self.cancel_order(internal_symbol, order_id, order_list_id=order_list_id, internal_symbol=True)
+            result_list.append(result)
+        return result_list
+
+    def get_balance(self, symbol=False, balance_type='total'):
+        balance = self.binance.fetch_balance()
+        if symbol:
+            if balance_type == 'total':
+                return balance[symbol]['total']
+            elif balance_type == 'free':
+                return balance[symbol]['free']
+            elif balance_type == 'used':
+                return balance[symbol]['used']
+            else:
+                raise NameError(f'Received {balance_type=}')
+        else:
+            return balance
+
+    def create_order(self, symbol, side, amount, price=0, stop_price=0, order_type='market'):
+        if order_type == 'market':
+            self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}')
+            return self.binance.create_order(symbol, order_type, side, amount)
+        elif order_type == 'limit' and price:
+            self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}')
+            return self.binance.create_order(symbol, order_type, side, amount, price)
+        elif order_type == 'stop_limit' and price and stop_price:
+            params = {'stopPrice': stop_price,
+                      'type': 'stopLimit',
+                      }
+            self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {params=}')
+            return self.binance.create_order(symbol, 'limit', side, amount, price, params)
+        else:
+            raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
 
 def setup_logger(name):
@@ -172,7 +228,9 @@ if __name__ == '__main__':
     # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
-    # pprint(bo.get_ticker_info('FET/BTC'))
+    # pprint(bo.get_ticker_info('YOYOW/BTC'))
     # pprint(bo.get_open_orders())
-    # print(bo.get_open_orders_id())
-    bo.cancel_order(822893643, 'BTCUSDT')
+    # print(bo.get_open_orders_info())
+    # bo.cancel_order('BTC/USDT', order_id)
+    # pprint(bo.cancel_all_order())
+    # pprint(bo.get_balance())
