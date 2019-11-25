@@ -115,8 +115,9 @@ class BinanceOrder:
     def get_ticker_info(self, symbol):
         ticker_data = self.binance.fetch_ticker(symbol)
         market_data = self.binance.load_markets()
-
+        pprint(self.binance.fetch_markets())
         ticker_info = dict()
+        ticker_info['quote_volume'] = ticker_data['quoteVolume']
         ticker_info['ask'] = ticker_data['ask']
         ticker_info['bid'] = ticker_data['bid']
         ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
@@ -170,7 +171,8 @@ class BinanceOrder:
                 order_list_id_list.append(order_list_id)
             result = self.cancel_order(internal_symbol, order_id, order_list_id=order_list_id, internal_symbol=True)
             result_list.append(result)
-        return result_list
+        self.logger.info(f'Cancel result: {result_list}')
+        return True
 
     def get_balance(self, symbol=False, balance_type='total'):
         balance = self.binance.fetch_balance()
@@ -202,6 +204,71 @@ class BinanceOrder:
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
+    def get_orderbook(self, symbol, limit=100):
+        if limit > 5000:
+            raise ValueError('Orderbook limit must be under 5000.')
+        orderbook_data = self.binance.fetch_order_book(symbol, limit)
+        orderbook = dict()
+        orderbook['asks'] = orderbook_data['asks']
+        orderbook['bids'] = orderbook_data['bids']
+        return orderbook
+
+    def sell_at_market(self, symbol):
+        self.logger.info(f'Sell {symbol} at market')
+        ticker, pair = symbol.split('/')
+        ticker_balance = self.get_balance(symbol=ticker, balance_type='free')
+
+        self.logger.info(f'{ticker} Balance: {ticker_balance}')
+        order_result = self.create_order(symbol, 'sell', ticker_balance)
+        self.logger.info(f'Order result: {order_result}')
+        return True
+
+    def buy_at_market(self, symbol, slip_rate=0.3):
+        self.logger.info(f'Buy {symbol} at market')
+        ticker, pair = symbol.split('/')
+        pair_balance = self.get_balance(symbol=pair)
+        self.logger.info(f'{pair} Balance: {pair_balance}')
+
+        orderbook_limit = 100
+        is_open = True
+        max_try = 10
+        while is_open and max_try:
+            max_try -= 1
+            orderbook = self.get_orderbook(symbol, limit=orderbook_limit)
+            ask_volume = 0
+            ask_price = 0
+            for price, quantity in orderbook['asks']:
+                ask_volume += price * quantity
+                if pair_balance * (1 + slip_rate) < ask_volume:
+                    ask_price = price
+                    break
+            if not ask_price:
+                orderbook_limit += 100
+                self.logger.info('Orderbook is weak. Enhance orderbook limit')
+                continue
+
+            self.logger.info(f'{symbol} Weighted average ask price: {ask_price}')
+            amount = pair_balance / ask_price
+            try:
+                order_result = self.create_order(symbol, 'buy', amount)
+            except ccxt.InsufficientFunds:
+                self.logger.info(f'Insufficient funds when market buying. '
+                                 f'Try again after 500ms. Remaining Try: {max_try}')
+                sleep(0.5)
+            else:
+                self.logger.info(f'Order result: {order_result}')
+                is_open = False
+        return True if max_try else False
+
+    def get_tickers_by_quote(self, quote):
+        market_data = self.binance.load_markets()
+        ticker_list = []
+        for symbol in market_data.keys():
+            _, pair = symbol.split('/')
+            if quote == pair:
+                ticker_list.append(symbol)
+        return ticker_list
+
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'
@@ -228,9 +295,12 @@ if __name__ == '__main__':
     # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
-    # pprint(bo.get_ticker_info('YOYOW/BTC'))
+    # pprint(bo.get_ticker_info('BTC/USDT'))
     # pprint(bo.get_open_orders())
     # print(bo.get_open_orders_info())
     # bo.cancel_order('BTC/USDT', order_id)
     # pprint(bo.cancel_all_order())
     # pprint(bo.get_balance())
+    # pprint(bo.get_orderbook('BTC/USDT'))
+    # bo.buy_at_market('ETH/BTC')
+    # pprint(bo.get_tickers_by_quote('BTC'))

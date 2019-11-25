@@ -25,8 +25,19 @@ class BinanceAltBtcDayTrade:
 
         self.btc_trade_data = {'prev_month': datetime.utcnow().month,
                                'btc_status': 'init',  # 'buy' or 'sell'
-                               'base_pair': 'USDT',
                                'base_symbol': 'BTC/USDT',
+                               }
+
+        self.alt_trade_data = {'base_pair': 'init',  # 'BTC' or 'USDT'
+                               'max_trade': 5,
+                               'trading_alts': [],
+                               'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS'],
+                               'btc_pair_condition': {'min_volume': 100,
+                                                      'min_price': 0.00000040,
+                                                      },
+                               'usdt_pair_condition': {'min_volume': 10 ** 6,
+                                                       'not_stable': True
+                                                       },
                                }
 
         self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
@@ -91,31 +102,38 @@ class BinanceAltBtcDayTrade:
         if self.bo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-
         month_now = datetime.utcnow().month
+
         if last_price < pivot['s1']:
             self.logger.info(f'{symbol}: Last Price is under Pivot S1')
             if self.btc_trade_data['btc_status'] != 'sell':
                 self.logger.info(f'{symbol}: current btc status is not \'sell\'. start sell procedure')
                 self.sell_all_btc()
                 self.btc_trade_data['btc_status'] = 'sell'
+                self.logger.info('Change btc status to \'sell\'')
+
         elif last_price < pivot['p']:
             self.logger.info(f'{symbol}: Last Price is under Pivot P')
             if self.btc_trade_data['btc_status'] != 'sell':
                 self.logger.info(f'{symbol}: current btc status is not \'sell\'.')
                 if self.btc_trade_data['prev_month'] is not month_now:
                     self.logger.info(f'{symbol}: New month. Start sell procedure')
-                    self.btc_trade_data['prev_month'] = month_now
                     self.sell_all_btc()
+                    self.btc_trade_data['prev_month'] = month_now
+                    self.logger.info('Update previous month status')
                     self.btc_trade_data['btc_status'] = 'sell'
+                    self.logger.info('Change btc status to \'sell\'')
                 else:
                     self.logger.info(f'{symbol}: Not new month. Passing under Pivot P trigger')
+
         else:
             self.logger.info(f'{symbol}: Last Price is more than Pivot P')
             if self.btc_trade_data['btc_status'] != 'buy':
                 self.logger.info(f'{symbol}: current btc status is not \'buy\'. start buy procedure')
                 self.buy_all_btc()
                 self.btc_trade_data['btc_status'] = 'buy'
+                self.logger.info('Change btc status to \'buy\'')
+
         self.logger.info('Exit BTC Trade')
 
     def alt_trade(self):
@@ -123,41 +141,116 @@ class BinanceAltBtcDayTrade:
         if not self.bo.check_exchange_status():
             self.logger.info('Exchange is Not Active. Exit Alt trade')
 
-        # 현재 진행중인 코인이 5개 미만일 떄
-        # 알트코인 가격과 거래량 수집
-        # 피봇아래거나 거래량이 적거나 가격이 지나치게 낮거나 Stable 페어인 ALT/BTC 페어 제거
-        # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
-        # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
-        # 한개 이상의 진행중인 코인이 있을 떄
-        # 진행중인 코인 가격과 오더북 수집
-        # 시장가가 익절가 이상일 경우 익절 오더 배치
-        # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+        btc_status = self.btc_trade_data['btc_status']
+        base_pair = self.alt_trade_data['base_pair']
+        self.bo.cancel_all_order()
+        if btc_status == 'buy' and base_pair != 'BTC':
+            self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
+            self.sell_invalid_alts()
+            self.logger.info('Change ALT/pair to BTC')
+            self.alt_trade_data['base_pair'] = 'BTC'
+
+        elif btc_status == 'sell' and base_pair != 'USDT':
+            self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
+            self.sell_invalid_alts()
+            self.logger.info('Change ALT/pair to USDT')
+            self.alt_trade_data['base_pair'] = 'USDT'
+
+        base_pair = self.alt_trade_data['base_pair']
+        if len(self.alt_trade_data['trading_alts']) <= 5:
+            tickers = self.bo.get_tickers_by_quote(base_pair)
+            valid_ticker_list = []
+            for ticker in tickers:
+                if self.is_valid_alt(ticker):
+                    valid_ticker_list.append(ticker)
+
+            pivot_ticker_list = valid_ticker_list.copy()
+            for ticker in valid_ticker_list:
+                pivot = self.bo.get_monthly_pivot(ticker)
+                ticker_info = self.bo.get_ticker_info(ticker)
+                if pivot['p'] > ticker_info['last_price']:
+                    pivot_ticker_list.remove(ticker)
+            # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
+            # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
+        if len(self.alt_trade_data['trading_alts']) > 0:
+            pass
+            # 한개 이상의 진행중인 코인이 있을 떄
+            # 진행중인 코인 가격과 오더북 수집
+            # R2,3에 익절 오더 배치
+            # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+
         self.logger.info('Exit Alt Trade')
 
     def sell_all_btc(self):
         self.logger.info('Sell All BTC')
-        cancel_result = self.bo.cancel_all_order()
-        self.logger.info(f'Cancel result: {cancel_result}')
-        btc_balance = self.bo.get_balance(symbol='BTC')
-        self.logger.info(f'BTC Balance: {btc_balance}')
+        self.bo.cancel_all_order()
         symbol = self.btc_trade_data['base_symbol']
-        order_result = self.bo.create_order(symbol, 'sell', btc_balance)
-        self.logger.info(f'Order result: {order_result}')
+        self.bo.sell_at_market(symbol)
 
     def buy_all_btc(self, slip_rate=0.995):
         self.logger.info('Buy All BTC')
-        pair = self.btc_trade_data['base_pair']
         symbol = self.btc_trade_data['base_symbol']
+        self.bo.cancel_all_order()
+        if not self.bo.sell_at_market(symbol):
+            raise Exception(f'Cannot sell {symbol} at market')
 
-        cancel_result = self.bo.cancel_all_order()
-        self.logger.info(f'Cancel result: {cancel_result}')
-        pair_balance = self.bo.get_balance(symbol=pair)
-        self.logger.info(f'{pair} Balance: {pair_balance}')
-        ask_price = self.bo.get_ticker_info(symbol)['ask']
-        self.logger.info(f'{symbol} Ask price: {pair_balance}')
-        amount = pair_balance / ask_price
-        order_result = self.bo.create_order(symbol, 'buy', amount*slip_rate)
-        self.logger.info(f'Order result: {order_result}')
+    def is_valid_alt(self, symbol):
+        if not self.bo.check_ticker_status(symbol):
+            return False
+
+        ticker, pair = symbol.split('/')
+
+        ticker_info = self.bo.get_ticker_info(symbol)
+        quote_volume = ticker_info['quote_volume']
+        btc_condition = self.alt_trade_data['btc_pair_condition']
+        usdt_condition = self.alt_trade_data['usdt_pair_condition']
+        stable_list = self.alt_trade_data['stable_list']
+
+        if pair == 'BTC':
+            min_volume = btc_condition['min_volume']
+            min_price = btc_condition['min_price']
+            if quote_volume < min_volume:
+                return False
+            elif quote_volume < min_price:
+                return False
+        elif pair == 'USDT':
+            min_volume = usdt_condition['min_volume']
+            if quote_volume < min_volume:
+                return False
+            elif ticker in stable_list and usdt_condition['not_stable']:
+                return False
+        return True
+
+    def sell_invalid_alts(self):
+        self.logger.info('Sell invalid alts.')
+        btc_base_symbol = self.btc_trade_data['base_symbol']
+
+        if len(self.alt_trade_data['trading_alts']):
+            self.logger.info('No trading alts.')
+            return
+
+        trading_alts = self.alt_trade_data['trading_alts'].copy()
+        for symbol in trading_alts:
+            ticker, pair = symbol.split('/')
+            if pair == 'USDT':
+                btc_symbol = ticker + '/BTC'
+                if self.is_valid_alt(btc_symbol):
+                    self.alt_trade_data['trading_alts'].remove(symbol)
+                    self.alt_trade_data['trading_alts'].append(btc_symbol)
+                if not self.bo.sell_at_market(symbol):
+                    raise Exception(f'Cannot sell {symbol} at market')
+                self.bo.buy_at_market(btc_base_symbol)
+            elif pair == 'BTC':
+                usdt_symbol = ticker + '/BTC'
+                if self.is_valid_alt(usdt_symbol):
+                    self.alt_trade_data['trading_alts'].remove(symbol)
+                    self.alt_trade_data['trading_alts'].append(usdt_symbol)
+                if not self.bo.sell_at_market(symbol):
+                    raise Exception(f'Cannot sell {symbol} at market')
+                if not self.bo.sell_at_market(btc_base_symbol):
+                    raise Exception(f'Cannot sell {btc_base_symbol} at market')
+
+        self.logger.info('Sold all invalid alts.')
 
 
 def setup_logger(name):
