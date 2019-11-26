@@ -236,19 +236,21 @@ class BinanceOrder:
             max_try -= 1
             orderbook = self.get_orderbook(symbol, limit=orderbook_limit)
             ask_volume = 0
-            ask_price = 0
+            ask_quantity = 0
+            weighted_ask_price = 0
             for price, quantity in orderbook['asks']:
                 ask_volume += price * quantity
+                ask_quantity += quantity
                 if pair_balance * (1 + slip_rate) < ask_volume:
-                    ask_price = price
+                    weighted_ask_price = ask_volume / ask_quantity
                     break
-            if not ask_price:
+            if not weighted_ask_price:
                 orderbook_limit += 100
                 self.logger.info('Orderbook is weak. Enhance orderbook limit')
                 continue
 
-            self.logger.info(f'{symbol} Weighted average ask price: {ask_price}')
-            amount = pair_balance / ask_price
+            self.logger.info(f'{symbol} Weighted average ask price: {weighted_ask_price}')
+            amount = pair_balance / weighted_ask_price
             try:
                 order_result = self.create_order(symbol, 'buy', amount)
             except ccxt.InsufficientFunds:
@@ -302,5 +304,5 @@ if __name__ == '__main__':
     # pprint(bo.cancel_all_order())
     # pprint(bo.get_balance())
     # pprint(bo.get_orderbook('BTC/USDT'))
-    # bo.buy_at_market('ETH/BTC')
+    # bo.buy_at_market('FET/BTC')
     # pprint(bo.get_tickers_by_quote('BTC'))
