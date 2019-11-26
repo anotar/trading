@@ -31,6 +31,7 @@ class BinanceAltBtcDayTrade:
         self.alt_trade_data = {'base_pair': 'init',  # 'BTC' or 'USDT'
                                'max_trade_limit': 5,
                                'trading_alts': [],
+                               'open_orders': [],
                                'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS'],
                                'btc_pair_condition': {'min_volume': 100,
                                                       'min_price': 0.00000040,
@@ -161,43 +162,16 @@ class BinanceAltBtcDayTrade:
             self.logger.info('Change ALT/pair to USDT')
             self.alt_trade_data['base_pair'] = 'USDT'
 
+        self.check_pivot_order()
         trading_alts = self.alt_trade_data['trading_alts']
         if trading_alts:
             self.logger.info(f'Current trading alts are {trading_alts}')
         else:
             self.logger.info('There is no trading alts')
-        base_pair = self.alt_trade_data['base_pair']
         if len(trading_alts) <= self.alt_trade_data['max_trade_limit']:
-            self.logger.info('Update market and ticker data.')
-            self.bo.update_market_data()
-            self.bo.update_ticker_data()
-            self.logger.info('Trading alts is below max trade limit. Find valid alts to trade')
-            tickers = self.bo.get_tickers_by_quote(base_pair, data_update=False)
-            self.logger.info(f'{base_pair} pair ticker count: {len(tickers)}')
-
-            valid_ticker_list = []
-            for ticker in tickers:
-                if self.is_valid_alt(ticker, data_update=False):
-                    valid_ticker_list.append(ticker)
-            self.logger.info(f'valid ticker count: {len(valid_ticker_list)}')
-
-            pivot_ticker_list = valid_ticker_list.copy()
-            for ticker in valid_ticker_list:
-                pivot = self.bo.get_monthly_pivot(ticker)
-                if not pivot:
-                    continue
-                ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
-                if pivot['p'] > ticker_info['last_price']:
-                    pivot_ticker_list.remove(ticker)
-            self.logger.info(f'ticker over pivot P count: {len(pivot_ticker_list)}')
-            # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
-            # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
+            self.make_pivot_order()
         if len(self.alt_trade_data['trading_alts']) > 0:
-            pass
-            # 한개 이상의 진행중인 코인이 있을 떄
-            # 진행중인 코인 가격과 오더북 수집
-            # R2,3에 익절 오더 배치
-            # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+            self.manage_pivot_order()
 
         self.logger.info('Exit Alt Trade')
 
@@ -214,8 +188,84 @@ class BinanceAltBtcDayTrade:
         if not self.bo.sell_at_market(symbol):
             raise Exception(f'Cannot sell {symbol} at market')
 
+    def check_pivot_order(self):
+        # 오더 상태 확인 및 업데이트
+        pass
+
+    def make_pivot_order(self):
+        base_pair = self.alt_trade_data['base_pair']
+        self.logger.info('Update market and ticker data.')
+        self.bo.update_market_data()
+        self.bo.update_ticker_data()
+        self.logger.info('Trading alts is below max trade limit. Find valid alts to trade')
+        tickers = self.bo.get_tickers_by_quote(base_pair, data_update=False)
+        self.logger.info(f'{base_pair} pair ticker count: {len(tickers)}')
+
+        valid_ticker_list = []
+        for ticker in tickers:
+            if self.is_valid_alt(ticker, data_update=False):
+                valid_ticker_list.append(ticker)
+        self.logger.info(f'Valid ticker count: {len(valid_ticker_list)}')
+
+        over_pivot_p_ticker_list = []
+        buy_triggered_ticker_list = []
+        for ticker in valid_ticker_list:
+            pivot = self.bo.get_monthly_pivot(ticker)
+            ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
+            if not pivot:
+                continue
+            ohlcv = self.bo.get_ohlcv(ticker, '1d', limit=10)
+            prev_close = ohlcv.iloc[-2]['close']
+            last_price = ticker_info['last_price']
+            if prev_close >= pivot['p']:
+                if last_price > pivot['p']:
+                    over_pivot_p_ticker_list.append(ticker)
+                else:
+                    buy_triggered_ticker_list.append(ticker)
+        self.logger.info(f'Buy triggered ticker count: {len(buy_triggered_ticker_list)}')
+        self.logger.info(f'Over pivot p ticker count: {len(over_pivot_p_ticker_list)}')
+
+        buy_max_limit = self.alt_trade_data['max_trade_limit'] - len(self.alt_trade_data['trading_alts'])
+        if buy_triggered_ticker_list:
+            self.logger.info('Buy under pivot ticker at market.')
+            for ticker in buy_triggered_ticker_list:
+                pair_balance = self.bo.get_balance(symbol=base_pair)
+                quantity = pair_balance/buy_max_limit
+                self.bo.buy_at_market(ticker, pair_quantity=quantity)
+                self.alt_trade_data['trading_alts'].append(ticker)
+                buy_max_limit -= 1
+                if not buy_max_limit:
+                    break
+            trading_alts = self.alt_trade_data['trading_alts']
+            self.logger.info(f'Trading alts is updated to {trading_alts}')
+        if over_pivot_p_ticker_list and buy_max_limit:
+            self.logger.info('Make order at pivot P')
+            # TODO: make check algorithm for below list clear step
+            self.alt_trade_data['open_orders'].clear()
+            for ticker in over_pivot_p_ticker_list:
+                pair_balance = self.bo.get_balance(symbol=base_pair, balance_type='free')
+                pivot = self.bo.get_monthly_pivot(ticker)
+                quantity = pair_balance / buy_max_limit / pivot['p']
+                order_result = self.bo.create_order(ticker, 'buy', quantity, price=pivot['p'], order_type='limit')
+                self.logger.info(f'Order result: {order_result}')
+                self.alt_trade_data['open_orders'].append(order_result)
+                buy_max_limit -= 1
+                if not buy_max_limit:
+                    break
+            open_alts = self.alt_trade_data['open_alts']
+            self.logger.info(f'Open alts is updated to {open_alts}')
+
+    def manage_pivot_order(self):
+        # 한개 이상의 진행중인 코인이 있을 떄
+        # 진행중인 코인 가격과 오더북 수집
+        # R2,3에 익절 오더 배치
+        # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+        pass
+
     def is_valid_alt(self, symbol, data_update=True):
         if not self.bo.check_ticker_status(symbol, data_update=data_update):
+            return False
+        if symbol in self.alt_trade_data['trading_alts']:
             return False
 
         ticker, pair = symbol.split('/')

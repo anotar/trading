@@ -140,8 +140,11 @@ class BinanceOrder:
                 ticker_list.append(symbol)
         return ticker_list
 
-    def get_ohlcv(self, symbol, interval):
-        ohlcv_original = self.binance.fetch_ohlcv(symbol, interval)
+    def get_ohlcv(self, symbol, interval, limit=False):
+        if limit:
+            ohlcv_original = self.binance.fetch_ohlcv(symbol, interval, limit=limit)
+        else:
+            ohlcv_original = self.binance.fetch_ohlcv(symbol, interval)
         ohlcv = pd.DataFrame()
         ohlcv['timestamp'] = [int(ohlcv_list[0]/1000) for ohlcv_list in ohlcv_original]
         ohlcv['open'] = [ohlcv_list[1] for ohlcv_list in ohlcv_original]
@@ -169,7 +172,7 @@ class BinanceOrder:
         pivot['r3'] = pivot['p'] + (high - low) * fibonacci[2]
         pivot['s3'] = pivot['p'] - (high - low) * fibonacci[2]
         for key in pivot:
-            pivot[key] = round(float(pivot[key]), 2)
+            pivot[key] = float(pivot[key])
         return pivot
 
     def get_yearly_pivot(self, symbol):
@@ -192,6 +195,20 @@ class BinanceOrder:
         close = ohlcv['close'].iloc[-2]
         pivot = self.get_pivot(high, low, close)
         return pivot
+
+    def get_balance(self, symbol=False, balance_type='total'):
+        balance = self.binance.fetch_balance()
+        if symbol:
+            if balance_type == 'total':
+                return balance[symbol]['total']
+            elif balance_type == 'free':
+                return balance[symbol]['free']
+            elif balance_type == 'used':
+                return balance[symbol]['used']
+            else:
+                raise NameError(f'Received {balance_type=}')
+        else:
+            return balance
 
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
@@ -236,20 +253,6 @@ class BinanceOrder:
         self.logger.info(f'Cancel result: {result_list}')
         return True
 
-    def get_balance(self, symbol=False, balance_type='total'):
-        balance = self.binance.fetch_balance()
-        if symbol:
-            if balance_type == 'total':
-                return balance[symbol]['total']
-            elif balance_type == 'free':
-                return balance[symbol]['free']
-            elif balance_type == 'used':
-                return balance[symbol]['used']
-            else:
-                raise NameError(f'Received {balance_type=}')
-        else:
-            return balance
-
     def create_order(self, symbol, side, amount, price=0, stop_price=0, order_type='market'):
         if order_type == 'market':
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}')
@@ -285,11 +288,12 @@ class BinanceOrder:
         self.logger.info(f'Order result: {order_result}')
         return True
 
-    def buy_at_market(self, symbol, slip_rate=0.3):
+    def buy_at_market(self, symbol, slip_rate=0.3, pair_quantity=False):
         self.logger.info(f'Buy {symbol} at market')
         ticker, pair = symbol.split('/')
-        pair_balance = self.get_balance(symbol=pair)
-        self.logger.info(f'{pair} Balance: {pair_balance}')
+        if not pair_quantity:
+            pair_quantity = self.get_balance(symbol=pair)
+        self.logger.info(f'{pair} quantity: {pair_quantity}')
 
         orderbook_limit = 100
         is_open = True
@@ -303,7 +307,7 @@ class BinanceOrder:
             for price, quantity in orderbook['asks']:
                 ask_volume += price * quantity
                 ask_quantity += quantity
-                if pair_balance * (1 + slip_rate) < ask_volume:
+                if pair_quantity * (1 + slip_rate) < ask_volume:
                     weighted_ask_price = ask_volume / ask_quantity
                     break
             if not weighted_ask_price:
@@ -312,7 +316,7 @@ class BinanceOrder:
                 continue
 
             self.logger.info(f'{symbol} Weighted average ask price: {weighted_ask_price}')
-            amount = pair_balance / weighted_ask_price
+            amount = pair_quantity / weighted_ask_price
             try:
                 order_result = self.create_order(symbol, 'buy', amount)
             except ccxt.InsufficientFunds:
