@@ -29,7 +29,7 @@ class BinanceAltBtcDayTrade:
                                }
 
         self.alt_trade_data = {'base_pair': 'init',  # 'BTC' or 'USDT'
-                               'max_trade': 5,
+                               'max_trade_limit': 5,
                                'trading_alts': [],
                                'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS'],
                                'btc_pair_condition': {'min_volume': 100,
@@ -62,7 +62,7 @@ class BinanceAltBtcDayTrade:
 
     def stop_trade(self):
         self.trade_loop_checker = False
-        # TODO: delete all pending order
+        self.bo.cancel_all_order()
         while self.trade_thread.is_alive():
             sleep(0.1)
         self.logger.info('Successfully Stopped ABD Trade Loop')
@@ -161,23 +161,35 @@ class BinanceAltBtcDayTrade:
             self.logger.info('Change ALT/pair to USDT')
             self.alt_trade_data['base_pair'] = 'USDT'
 
+        trading_alts = self.alt_trade_data['trading_alts']
+        if trading_alts:
+            self.logger.info(f'Current trading alts are {trading_alts}')
+        else:
+            self.logger.info('There is no trading alts')
         base_pair = self.alt_trade_data['base_pair']
-        if len(self.alt_trade_data['trading_alts']) <= 5:
-            tickers = self.bo.get_tickers_by_quote(base_pair)
+        if len(trading_alts) <= self.alt_trade_data['max_trade_limit']:
+            self.logger.info('Update market and ticker data.')
+            self.bo.update_market_data()
+            self.bo.update_ticker_data()
+            self.logger.info('Trading alts is below max trade limit. Find valid alts to trade')
+            tickers = self.bo.get_tickers_by_quote(base_pair, data_update=False)
+            self.logger.info(f'{base_pair} pair ticker count: {len(tickers)}')
+
             valid_ticker_list = []
             for ticker in tickers:
-                if self.is_valid_alt(ticker):
+                if self.is_valid_alt(ticker, data_update=False):
                     valid_ticker_list.append(ticker)
+            self.logger.info(f'valid ticker count: {len(valid_ticker_list)}')
 
             pivot_ticker_list = valid_ticker_list.copy()
             for ticker in valid_ticker_list:
                 pivot = self.bo.get_monthly_pivot(ticker)
                 if not pivot:
                     continue
-                ticker_info = self.bo.get_ticker_info(ticker)
+                ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
                 if pivot['p'] > ticker_info['last_price']:
                     pivot_ticker_list.remove(ticker)
-            pprint(pivot_ticker_list)
+            self.logger.info(f'ticker over pivot P count: {len(pivot_ticker_list)}')
             # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
             # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
         if len(self.alt_trade_data['trading_alts']) > 0:
@@ -202,14 +214,15 @@ class BinanceAltBtcDayTrade:
         if not self.bo.sell_at_market(symbol):
             raise Exception(f'Cannot sell {symbol} at market')
 
-    def is_valid_alt(self, symbol):
-        if not self.bo.check_ticker_status(symbol):
+    def is_valid_alt(self, symbol, data_update=True):
+        if not self.bo.check_ticker_status(symbol, data_update=data_update):
             return False
 
         ticker, pair = symbol.split('/')
 
-        ticker_info = self.bo.get_ticker_info(symbol)
+        ticker_info = self.bo.get_ticker_statistics(symbol, data_update=data_update)
         quote_volume = ticker_info['quote_volume']
+        last_price = ticker_info['last_price']
         btc_condition = self.alt_trade_data['btc_pair_condition']
         usdt_condition = self.alt_trade_data['usdt_pair_condition']
         stable_list = self.alt_trade_data['stable_list']
@@ -219,7 +232,7 @@ class BinanceAltBtcDayTrade:
             min_price = btc_condition['min_price']
             if quote_volume < min_volume:
                 return False
-            elif quote_volume < min_price:
+            elif last_price < min_price:
                 return False
         elif pair == 'USDT':
             min_volume = usdt_condition['min_volume']

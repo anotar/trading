@@ -19,6 +19,12 @@ class BinanceOrder:
              'secret': api_secret,
              'enableRateLimit': False,
              })
+
+        self.logger.info('Update market and ticker data at initial.')
+        self.market_data, self.ticker_data = dict(), dict()
+        self.update_market_data()
+        self.update_ticker_data()
+
         self.logger.info('Binance Order Module Setup Completed')
 
     def show_basic_info(self):
@@ -36,9 +42,10 @@ class BinanceOrder:
         market_data = self.binance.load_markets()
         pprint(market_data['BTC/USDT'])
         pprint(market_data.keys())
-        ohlcv = bo.get_ohlcv('BTC/UDST', '1m')
+        ohlcv = bo.get_ohlcv('BTC/USDT', '1m')
         # print(ohlcv)
         # pprint(self.binance.fetch_ticker('BTC/USDT'))
+        pprint(self.binance.fetch_markets())
 
     def check_exchange_status(self):
         exchange_status = self.binance.fetch_status()
@@ -48,8 +55,17 @@ class BinanceOrder:
         else:
             return False
 
-    def check_ticker_status(self, symbol):
-        market_data = self.binance.load_markets()
+    def update_market_data(self):
+        self.market_data = self.binance.load_markets()
+
+    def update_ticker_data(self):
+        self.ticker_data = self.binance.publicGetTicker24hr()
+
+    def check_ticker_status(self, symbol, data_update=True):
+        if data_update:
+            market_data = self.binance.load_markets()
+        else:
+            market_data = self.market_data
         if symbol not in market_data.keys():
             return False
 
@@ -58,6 +74,71 @@ class BinanceOrder:
             return True
         else:
             return False
+
+    def get_ticker_info(self, symbol, data_update=True):
+        ticker_data = self.binance.fetch_ticker(symbol)
+        if data_update:
+            market_data = self.binance.load_markets()
+        else:
+            market_data = self.market_data
+        ticker_info = dict()
+        ticker_info['quote_volume'] = ticker_data['quoteVolume']
+        ticker_info['ask'] = ticker_data['ask']
+        ticker_info['bid'] = ticker_data['bid']
+        ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
+        ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
+        ticker_info['internal_symbol'] = ticker_data['info']['symbol']
+        for ticker_filter in market_data[symbol]['info']['filters']:
+            if ticker_filter['filterType'] == 'PRICE_FILTER':
+                ticker_info['tick_size'] = float(ticker_filter['tickSize'])
+        for ticker_filter in market_data[symbol]['info']['filters']:
+            if ticker_filter['filterType'] == 'LOT_SIZE':
+                ticker_info['step_size'] = float(ticker_filter['stepSize'])
+        return ticker_info
+
+    def get_ticker_statistics(self, symbol, internal_symbol=False, data_update=True):
+        original_symbol = symbol
+        if not internal_symbol:
+            symbol = symbol.replace('/', '')
+            is_valid_symbol = False
+            for data in self.ticker_data:
+                if symbol == data['symbol']:
+                    is_valid_symbol = True
+                    break
+            if not is_valid_symbol:
+                ticker_info = self.get_ticker_info(original_symbol)
+                symbol = ticker_info['internal_symbol']
+
+        ticker_24hr_stat = dict()
+        if data_update:
+            param = {'symbol': symbol}
+            ticker_24hr_stat = self.binance.publicGetTicker24hr(param)
+        else:
+            for data in self.ticker_data:
+                if symbol == data['symbol']:
+                    ticker_24hr_stat = data
+                    break
+
+        if not ticker_24hr_stat:
+            raise ValueError(f'Received {symbol}. ticker is invalid')
+
+        ticker_stat = dict()
+        ticker_stat['last_price'] = float(ticker_24hr_stat['lastPrice'])
+        ticker_stat['quote_volume'] = float(ticker_24hr_stat['quoteVolume'])
+
+        return ticker_stat
+
+    def get_tickers_by_quote(self, quote, data_update=True):
+        if data_update:
+            market_data = self.binance.load_markets()
+        else:
+            market_data = self.market_data
+        ticker_list = []
+        for symbol in market_data.keys():
+            _, pair = symbol.split('/')
+            if quote == pair:
+                ticker_list.append(symbol)
+        return ticker_list
 
     def get_ohlcv(self, symbol, interval):
         ohlcv_original = self.binance.fetch_ohlcv(symbol, interval)
@@ -111,24 +192,6 @@ class BinanceOrder:
         close = ohlcv['close'].iloc[-2]
         pivot = self.get_pivot(high, low, close)
         return pivot
-
-    def get_ticker_info(self, symbol):
-        ticker_data = self.binance.fetch_ticker(symbol)
-        market_data = self.binance.load_markets()
-        ticker_info = dict()
-        ticker_info['quote_volume'] = ticker_data['quoteVolume']
-        ticker_info['ask'] = ticker_data['ask']
-        ticker_info['bid'] = ticker_data['bid']
-        ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
-        ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
-        ticker_info['internal_symbol'] = ticker_data['info']['symbol']
-        for ticker_filter in market_data[symbol]['info']['filters']:
-            if ticker_filter['filterType'] == 'PRICE_FILTER':
-                ticker_info['tick_size'] = float(ticker_filter['tickSize'])
-        for ticker_filter in market_data[symbol]['info']['filters']:
-            if ticker_filter['filterType'] == 'LOT_SIZE':
-                ticker_info['step_size'] = float(ticker_filter['stepSize'])
-        return ticker_info
 
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
@@ -261,15 +324,6 @@ class BinanceOrder:
                 is_open = False
         return True if max_try else False
 
-    def get_tickers_by_quote(self, quote):
-        market_data = self.binance.load_markets()
-        ticker_list = []
-        for symbol in market_data.keys():
-            _, pair = symbol.split('/')
-            if quote == pair:
-                ticker_list.append(symbol)
-        return ticker_list
-
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'
@@ -305,3 +359,4 @@ if __name__ == '__main__':
     # pprint(bo.get_orderbook('BTC/USDT'))
     # bo.buy_at_market('FET/BTC')
     # pprint(bo.get_tickers_by_quote('BTC'))
+    # pprint(bo.get_ticker_statistics('BTC/USDT'))
