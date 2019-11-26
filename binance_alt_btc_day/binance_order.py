@@ -115,7 +115,6 @@ class BinanceOrder:
     def get_ticker_info(self, symbol):
         ticker_data = self.binance.fetch_ticker(symbol)
         market_data = self.binance.load_markets()
-        pprint(self.binance.fetch_markets())
         ticker_info = dict()
         ticker_info['quote_volume'] = ticker_data['quoteVolume']
         ticker_info['ask'] = ticker_data['ask']

@@ -104,10 +104,12 @@ class BinanceAltBtcDayTrade:
             return False
         month_now = datetime.utcnow().month
 
+        btc_status = self.btc_trade_data['btc_status']
+        self.logger.info(f'Current btc status is \'{btc_status}\'')
         if last_price < pivot['s1']:
             self.logger.info(f'{symbol}: Last Price is under Pivot S1')
             if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: current btc status is not \'sell\'. start sell procedure')
+                self.logger.info(f'{symbol}: start sell procedure')
                 self.sell_all_btc()
                 self.btc_trade_data['btc_status'] = 'sell'
                 self.logger.info('Change btc status to \'sell\'')
@@ -115,7 +117,6 @@ class BinanceAltBtcDayTrade:
         elif last_price < pivot['p']:
             self.logger.info(f'{symbol}: Last Price is under Pivot P')
             if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: current btc status is not \'sell\'.')
                 if self.btc_trade_data['prev_month'] is not month_now:
                     self.logger.info(f'{symbol}: New month. Start sell procedure')
                     self.sell_all_btc()
@@ -124,12 +125,15 @@ class BinanceAltBtcDayTrade:
                     self.btc_trade_data['btc_status'] = 'sell'
                     self.logger.info('Change btc status to \'sell\'')
                 else:
-                    self.logger.info(f'{symbol}: Not new month. Passing under Pivot P trigger')
+                    self.logger.info('Not new month. Passing under Pivot P trigger')
+                    if self.btc_trade_data['btc_status'] != 'buy':
+                        self.btc_trade_data['btc_status'] = 'buy'
+                        self.logger.info('Change btc status to \'buy\'')
 
         else:
             self.logger.info(f'{symbol}: Last Price is more than Pivot P')
             if self.btc_trade_data['btc_status'] != 'buy':
-                self.logger.info(f'{symbol}: current btc status is not \'buy\'. start buy procedure')
+                self.logger.info(f'{symbol}: start buy procedure')
                 self.buy_all_btc()
                 self.btc_trade_data['btc_status'] = 'buy'
                 self.logger.info('Change btc status to \'buy\'')
@@ -143,6 +147,7 @@ class BinanceAltBtcDayTrade:
 
         btc_status = self.btc_trade_data['btc_status']
         base_pair = self.alt_trade_data['base_pair']
+        self.logger.info(f'Current alt base pair is \'{base_pair}\'')
         self.bo.cancel_all_order()
         if btc_status == 'buy' and base_pair != 'BTC':
             self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
@@ -167,9 +172,12 @@ class BinanceAltBtcDayTrade:
             pivot_ticker_list = valid_ticker_list.copy()
             for ticker in valid_ticker_list:
                 pivot = self.bo.get_monthly_pivot(ticker)
+                if not pivot:
+                    continue
                 ticker_info = self.bo.get_ticker_info(ticker)
                 if pivot['p'] > ticker_info['last_price']:
                     pivot_ticker_list.remove(ticker)
+            pprint(pivot_ticker_list)
             # 현재가격이 조건에 맞는 코인이 있는지 확인 후 조건에 맞으면 매수
             # 남은 코인 갯수에 따라 거래량 순으로 오더 배치
         if len(self.alt_trade_data['trading_alts']) > 0:
