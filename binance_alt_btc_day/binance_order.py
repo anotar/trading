@@ -85,7 +85,7 @@ class BinanceOrder:
         ticker_info['quote_volume'] = ticker_data['quoteVolume']
         ticker_info['ask'] = ticker_data['ask']
         ticker_info['bid'] = ticker_data['bid']
-        ticker_info['last_price'] = round(Decimal(ticker_data['last']), 8)
+        ticker_info['last_price'] = ticker_data['last']
         ticker_info['timestamp'] = int(ticker_data['timestamp']/1000)
         ticker_info['internal_symbol'] = ticker_data['info']['symbol']
         for ticker_filter in market_data[symbol]['info']['filters']:
@@ -234,7 +234,7 @@ class BinanceOrder:
         else:
             return self.binance.cancel_order(str(order_id), symbol)
 
-    def cancel_all_order(self):
+    def cancel_all_order(self, oco=True):
         self.logger.info('Cancel all order')
         orders_info = self.get_open_orders_info()
         result_list = []
@@ -246,7 +246,7 @@ class BinanceOrder:
             order_list_id = order_info['order_list_id']
             if order_list_id in order_list_id_list:
                 continue
-            elif order_list_id != -1:
+            elif order_list_id != -1 and oco:
                 order_list_id_list.append(order_list_id)
             result = self.cancel_order(internal_symbol, order_id, order_list_id=order_list_id, internal_symbol=True)
             result_list.append(result)
@@ -268,6 +268,8 @@ class BinanceOrder:
             return self.binance.create_order(symbol, 'limit', side, amount, price, params)
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
+
+    def create_oco_order(self, symbol, side, amount, price, stop_price,):
 
     def get_orderbook(self, symbol, limit=100):
         if limit > 5000:
