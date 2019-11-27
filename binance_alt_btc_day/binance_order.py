@@ -22,8 +22,12 @@ class BinanceOrder:
 
         self.logger.info('Update market and ticker data at initial.')
         self.market_data, self.ticker_data = dict(), dict()
+        self.open_order_data = []
         self.update_market_data()
         self.update_ticker_data()
+
+        self.btc_minimum_order_size = 0.001 * 1.3
+        self.usdt_minimum_order_size = 10 * 1.3
 
         self.logger.info('Binance Order Module Setup Completed')
 
@@ -212,17 +216,44 @@ class BinanceOrder:
 
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
-        return open_orders
-
-    def get_open_orders_info(self):
-        open_orders = self.get_open_orders()
         if open_orders:
             return [{'order_id': open_order['orderId'],
                      'order_list_id': open_order['orderListId'],
-                     'internal_symbol': open_order['symbol']}
+                     'internal_symbol': open_order['symbol'],
+                     'original_quantity': open_order['origQty'],
+                     'executed_quantity': open_order['executedQty'],
+                     'timestamp': int(open_order['time'] // 1000)
+                     }
                     for open_order in open_orders]
         else:
             return []
+
+    def update_open_order_data(self):
+        self.open_order_data = self.get_open_orders()
+
+    def get_open_order_info(self, order_id, data_update=True):
+        if data_update:
+            open_orders = self.get_open_orders()
+        else:
+            open_orders = self.open_order_data
+        for open_order in open_orders:
+            if open_order['order_id'] == order_id:
+                return open_order
+        return False
+
+    def get_order_stat(self, order_id, symbol):
+        order_data = self.binance.fetch_order(order_id, symbol=symbol)
+        order_status = order_data['info']['status']
+        if order_status == 'NEW':
+            return 'new'
+        elif order_status == 'PARTIALLY_FILLED':
+            return 'partially_filled'
+        elif order_status == 'FILLED':
+            return 'filled'
+        elif order_status == 'CANCELED':
+            return 'canceled'
+        else:
+            raise ValueError(f'Uncaught order status: {order_status}')
 
     def cancel_order(self, symbol, order_id, order_list_id=-1, internal_symbol=False):
         if order_list_id != -1:
@@ -234,8 +265,13 @@ class BinanceOrder:
         else:
             return self.binance.cancel_order(str(order_id), symbol)
 
-    def cancel_all_order(self, oco=True):
-        self.logger.info('Cancel all order')
+    def cancel_all_order(self, normal=True, oco=True):
+        if oco:
+            self.logger.info('Cancel all OCO order')
+        if normal:
+            self.logger.info('Cancel all normal order')
+        if not oco and not normal:
+            raise ValueError('Either OCO or normal should be True')
         orders_info = self.get_open_orders_info()
         result_list = []
         order_list_id_list = []
@@ -246,8 +282,14 @@ class BinanceOrder:
             order_list_id = order_info['order_list_id']
             if order_list_id in order_list_id_list:
                 continue
-            elif order_list_id != -1 and oco:
-                order_list_id_list.append(order_list_id)
+            elif oco:
+                if order_list_id != -1:
+                    order_list_id_list.append(order_list_id)
+            if normal:
+                if order_list_id == -1:
+                    order_list_id_list.append(order_list_id)
+                else:
+                    continue
             result = self.cancel_order(internal_symbol, order_id, order_list_id=order_list_id, internal_symbol=True)
             result_list.append(result)
         self.logger.info(f'Cancel result: {result_list}')
@@ -269,7 +311,20 @@ class BinanceOrder:
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
-    def create_oco_order(self, symbol, side, amount, price, stop_price,):
+    def create_oco_order(self, symbol, side, amount, price, stop_price, limit_price,
+                         time_in_force='GTC', internal_symbol=False):
+        if not internal_symbol:
+            ticker_info = self.get_ticker_info(symbol)
+            symbol = ticker_info['internal_symbol']
+        self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {stop_price=}, {limit_price=}')
+        params = {'symbol': symbol,
+                  'side': side.upper(),
+                  'quantity': amount,
+                  'price': price,
+                  'stopPrice': stop_price,
+                  'stopLimitPrice': limit_price,
+                  'stopLimitTimeInForce': time_in_force}
+        return self.binance.privatePostOrderOco(params)
 
     def get_orderbook(self, symbol, limit=100):
         if limit > 5000:
@@ -280,13 +335,34 @@ class BinanceOrder:
         orderbook['bids'] = orderbook_data['bids']
         return orderbook
 
-    def sell_at_market(self, symbol):
+    def check_order_quantity(self, pair, quantity):
+        if pair == 'BTC':
+            if quantity > self.btc_minimum_order_size:
+                return True
+        elif pair == 'USDT':
+            if quantity > self.usdt_minimum_order_size:
+                return True
+        else:
+            raise ValueError(f'{pair} pair is not defined')
+        return False
+
+    def sell_at_market(self, symbol, quantity=False):
         self.logger.info(f'Sell {symbol} at market')
         ticker, pair = symbol.split('/')
-        ticker_balance = self.get_balance(symbol=ticker, balance_type='free')
+        if not quantity:
+            quantity = self.get_balance(symbol=ticker, balance_type='free')
+        ticker_info = self.get_ticker_info(symbol)
+        last_price = ticker_info['last_price']
+        step_size = ticker_info['step_size']
+        # TODO: step size algorithm
+        quote_quantity = last_price * quantity
+        if not self.check_order_quantity(pair, quote_quantity):
+            self.logger.info(f'{pair} quantity({quote_quantity}) is under minimum order size. Cancel order')
+            return False
 
-        self.logger.info(f'{ticker} Balance: {ticker_balance}')
-        order_result = self.create_order(symbol, 'sell', ticker_balance)
+        self.logger.info(f'{ticker} Quantity: {quantity}')
+
+        order_result = self.create_order(symbol, 'sell', quantity)
         self.logger.info(f'Order result: {order_result}')
         return True
 
@@ -295,7 +371,12 @@ class BinanceOrder:
         ticker, pair = symbol.split('/')
         if not pair_quantity:
             pair_quantity = self.get_balance(symbol=pair)
-        self.logger.info(f'{pair} quantity: {pair_quantity}')
+        ticker_info = self.get_ticker_info(symbol, data_update=False)
+        step_size = ticker_info['step_size']
+        # TODO: step size algorithm
+        if not self.check_order_quantity(pair, pair_quantity):
+            self.logger.info(f'{pair} quantity({pair_quantity}) is under minimum order size. Cancel order')
+            return False
 
         orderbook_limit = 100
         is_open = True
@@ -366,3 +447,4 @@ if __name__ == '__main__':
     # bo.buy_at_market('FET/BTC')
     # pprint(bo.get_tickers_by_quote('BTC'))
     # pprint(bo.get_ticker_statistics('BTC/USDT'))
+    pprint(bo.binance.fetch_orders('LTC/BTC'))
