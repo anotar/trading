@@ -1,5 +1,2 @@
-a = {'a':{'b':'c'}}
-d = a['a']
-d['b'] = 'd'
-del d['b']
-print(a)
+from pprint import pprint
+pprint({'info': {'symbol': 'NEOBTC', 'orderId': 159382503, 'orderListId': -1, 'clientOrderId': 'q92mklYVShHyucwvjlbAxD', 'transactTime': 1574789349907, 'price': '0.00112800', 'origQty': '14.62000000', 'executedQty': '0.00000000', 'cummulativeQuoteQty': '0.00000000', 'status': 'NEW', 'timeInForce': 'GTC', 'type': 'LIMIT', 'side': 'BUY'}, 'id': '159382503', 'timestamp': 1574789349907, 'datetime': '2019-11-26T17:29:09.907Z', 'lastTradeTimestamp': None, 'symbol': 'NEO/BTC', 'type': 'limit', 'side': 'buy', 'price': 0.001128, 'amount': 14.62, 'cost': 0.0, 'average': None, 'filled': 0.0, 'remaining': 14.62, 'status': 'open', 'fee': None, 'trades': None})

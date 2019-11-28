@@ -216,7 +216,6 @@ class BinanceOrder:
 
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
-        pprint(open_orders)
         if open_orders:
             return [{'order_id': open_order['orderId'],
                      'order_list_id': open_order['orderListId'],
@@ -307,12 +306,18 @@ class BinanceOrder:
 
     def create_oco_order(self, symbol, side, amount, price, stop_price, limit_price,
                          time_in_force='GTC', internal_symbol=False):
+        ticker_info = self.get_ticker_info(symbol)
         if not internal_symbol:
-            ticker_info = self.get_ticker_info(symbol)
             symbol = ticker_info['internal_symbol']
+        side = side.upper()
+        # TODO: make valid precision
+        amount = amount
+        price = price
+        stop_price = stop_price
+        limit_price = limit_price
         self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {stop_price=}, {limit_price=}')
         params = {'symbol': symbol,
-                  'side': side.upper(),
+                  'side': side,
                   'quantity': amount,
                   'price': price,
                   'stopPrice': stop_price,
@@ -352,7 +357,7 @@ class BinanceOrder:
         ticker, pair = symbol.split('/')
         if not quantity:
             quantity = self.get_balance(symbol=ticker, balance_type='free')
-        if not self.check_order_quantity(pair, quantity):
+        if not self.check_order_quantity(symbol, quantity):
             self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
             return False
 
@@ -369,8 +374,8 @@ class BinanceOrder:
             pair_quantity = self.get_balance(symbol=pair)
         ticker_info = self.get_ticker_info(symbol, data_update=False)
         last_price = ticker_info['last_price']
-        quantity = last_price / pair_quantity if pair_quantity else 0
-        if not self.check_order_quantity(pair, quantity):
+        quantity = pair_quantity / last_price
+        if not self.check_order_quantity(symbol, quantity):
             self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
             return False
 
@@ -434,7 +439,7 @@ if __name__ == '__main__':
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
     # pprint(bo.get_ticker_info('LTC/BTC'))
-    pprint(bo.get_open_orders())
+    # pprint(bo.get_open_orders())
     # print(bo.get_open_orders_info())
     # bo.get_order_stat(842733901, 'BTC/USDT')
     # bo.cancel_order('BTC/USDT', 842733901)
@@ -445,3 +450,4 @@ if __name__ == '__main__':
     # pprint(bo.get_tickers_by_quote('BTC'))
     # pprint(bo.get_ticker_statistics('BTC/USDT'))
     # pprint(bo.binance.fetch_orders('LTC/BTC'))
+    # pprint(bo.create_oco_order('BTC/USDT', 'sell', 0.01, 9000, 5000, 4000))
