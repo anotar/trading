@@ -601,7 +601,8 @@ if __name__ == '__main__':
 
     print('start trade')
     binanceABDT.start_trade()
-    sleep(6000)
+    while True:
+        sleep(100)
     print('stop trade')
     binanceABDT.stop_trade()
 
