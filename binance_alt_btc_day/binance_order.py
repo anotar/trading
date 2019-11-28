@@ -217,11 +217,11 @@ class BinanceOrder:
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
         if open_orders:
-            return [{'order_id': open_order['orderId'],
-                     'order_list_id': open_order['orderListId'],
+            return [{'order_id': int(open_order['orderId']),
+                     'order_list_id': int(open_order['orderListId']),
                      'internal_symbol': open_order['symbol'],
-                     'original_quantity': open_order['origQty'],
-                     'executed_quantity': open_order['executedQty'],
+                     'original_quantity': float(open_order['origQty']),
+                     'executed_quantity': float(open_order['executedQty']),
                      'timestamp': int(open_order['time'] // 1000)
                      }
                     for open_order in open_orders]
@@ -232,6 +232,7 @@ class BinanceOrder:
         self.open_order_data = self.get_open_orders()
 
     def get_open_order_info(self, order_id, data_update=True):
+        order_id = int(order_id)
         if data_update:
             open_orders = self.get_open_orders()
         else:
@@ -244,7 +245,7 @@ class BinanceOrder:
     def get_order_stat(self, order_id, symbol):
         order_data = self.binance.fetch_order(order_id, symbol=symbol)
         order_stat = {'status': order_data['info']['status'].lower(),  # type: new, partially_filled, filled, canceled
-                      'executed_quantity': order_data['info']['executedQty'],
+                      'executed_quantity': float(order_data['info']['executedQty']),
                       }
         return order_stat
 
@@ -296,27 +297,25 @@ class BinanceOrder:
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}')
             return self.binance.create_order(symbol, order_type, side, amount, price)
         elif order_type == 'stop_limit' and price and stop_price:
+            stop_price = self.binance.price_to_precision(symbol, stop_price)
             params = {'stopPrice': stop_price,
-                      'type': 'stopLimit',
+                      'type': 'STOP_LOSS_LIMIT',
                       }
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {params=}')
             return self.binance.create_order(symbol, 'limit', side, amount, price, params)
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
-    def create_oco_order(self, symbol, side, amount, price, stop_price, limit_price,
-                         time_in_force='GTC', internal_symbol=False):
-        ticker_info = self.get_ticker_info(symbol)
-        if not internal_symbol:
-            symbol = ticker_info['internal_symbol']
+    def create_oco_order(self, symbol, side, amount, price, stop_price, limit_price, time_in_force='GTC'):
         side = side.upper()
-        # TODO: make valid precision
-        amount = amount
-        price = price
-        stop_price = stop_price
-        limit_price = limit_price
+        ticker_info = self.get_ticker_info(symbol)
+        internal_symbol = ticker_info['internal_symbol']
+        amount = self.binance.amount_to_precision(symbol, amount)
+        price = self.binance.price_to_precision(symbol, price)
+        stop_price = self.binance.price_to_precision(symbol, stop_price)
+        limit_price = self.binance.price_to_precision(symbol, limit_price)
         self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {stop_price=}, {limit_price=}')
-        params = {'symbol': symbol,
+        params = {'symbol': internal_symbol,
                   'side': side,
                   'quantity': amount,
                   'price': price,
