@@ -216,6 +216,7 @@ class BinanceOrder:
 
     def get_open_orders(self):
         open_orders = self.binance.privateGetOpenOrders()
+        pprint(open_orders)
         if open_orders:
             return [{'order_id': open_order['orderId'],
                      'order_list_id': open_order['orderListId'],
@@ -243,17 +244,10 @@ class BinanceOrder:
 
     def get_order_stat(self, order_id, symbol):
         order_data = self.binance.fetch_order(order_id, symbol=symbol)
-        order_status = order_data['info']['status']
-        if order_status == 'NEW':
-            return 'new'
-        elif order_status == 'PARTIALLY_FILLED':
-            return 'partially_filled'
-        elif order_status == 'FILLED':
-            return 'filled'
-        elif order_status == 'CANCELED':
-            return 'canceled'
-        else:
-            raise ValueError(f'Uncaught order status: {order_status}')
+        order_stat = {'status': order_data['info']['status'].lower(),  # type: new, partially_filled, filled, canceled
+                      'executed_quantity': order_data['info']['executedQty'],
+                      }
+        return order_stat
 
     def cancel_order(self, symbol, order_id, order_list_id=-1, internal_symbol=False):
         if order_list_id != -1:
@@ -335,29 +329,31 @@ class BinanceOrder:
         orderbook['bids'] = orderbook_data['bids']
         return orderbook
 
-    def check_order_quantity(self, pair, quantity):
+    def check_order_quantity(self, symbol, quantity):
+        ticker_info = self.get_ticker_info(symbol, data_update=False)
+        step_size = ticker_info['step_size']
+        last_price = ticker_info['last_price']
+        quote_quantity = quantity * last_price
+        if quantity < step_size:
+            return False
+        ticker, pair = symbol.split('/')
         if pair == 'BTC':
-            if quantity > self.btc_minimum_order_size:
-                return True
+            if quote_quantity < self.btc_minimum_order_size:
+                return False
         elif pair == 'USDT':
-            if quantity > self.usdt_minimum_order_size:
-                return True
+            if quote_quantity < self.usdt_minimum_order_size:
+                return False
         else:
-            raise ValueError(f'{pair} pair is not defined')
-        return False
+            raise ValueError(f'{pair} pair order size is not defined')
+        return True
 
     def sell_at_market(self, symbol, quantity=False):
         self.logger.info(f'Sell {symbol} at market')
         ticker, pair = symbol.split('/')
         if not quantity:
             quantity = self.get_balance(symbol=ticker, balance_type='free')
-        ticker_info = self.get_ticker_info(symbol)
-        last_price = ticker_info['last_price']
-        step_size = ticker_info['step_size']
-        # TODO: step size algorithm
-        quote_quantity = last_price * quantity
-        if not self.check_order_quantity(pair, quote_quantity):
-            self.logger.info(f'{pair} quantity({quote_quantity}) is under minimum order size. Cancel order')
+        if not self.check_order_quantity(pair, quantity):
+            self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
             return False
 
         self.logger.info(f'{ticker} Quantity: {quantity}')
@@ -372,10 +368,10 @@ class BinanceOrder:
         if not pair_quantity:
             pair_quantity = self.get_balance(symbol=pair)
         ticker_info = self.get_ticker_info(symbol, data_update=False)
-        step_size = ticker_info['step_size']
-        # TODO: step size algorithm
-        if not self.check_order_quantity(pair, pair_quantity):
-            self.logger.info(f'{pair} quantity({pair_quantity}) is under minimum order size. Cancel order')
+        last_price = ticker_info['last_price']
+        quantity = last_price / pair_quantity if pair_quantity else 0
+        if not self.check_order_quantity(pair, quantity):
+            self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
             return False
 
         orderbook_limit = 100
@@ -437,14 +433,15 @@ if __name__ == '__main__':
     # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
-    # pprint(bo.get_ticker_info('BTC/USDT'))
-    # pprint(bo.get_open_orders())
+    # pprint(bo.get_ticker_info('LTC/BTC'))
+    pprint(bo.get_open_orders())
     # print(bo.get_open_orders_info())
-    # bo.cancel_order('BTC/USDT', order_id)
+    # bo.get_order_stat(842733901, 'BTC/USDT')
+    # bo.cancel_order('BTC/USDT', 842733901)
     # pprint(bo.cancel_all_order())
     # pprint(bo.get_balance())
     # pprint(bo.get_orderbook('BTC/USDT'))
     # bo.buy_at_market('FET/BTC')
     # pprint(bo.get_tickers_by_quote('BTC'))
     # pprint(bo.get_ticker_statistics('BTC/USDT'))
-    pprint(bo.binance.fetch_orders('LTC/BTC'))
+    # pprint(bo.binance.fetch_orders('LTC/BTC'))

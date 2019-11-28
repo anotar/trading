@@ -28,15 +28,25 @@ class BinanceAltBtcDayTrade:
                                'base_symbol': 'BTC/USDT',
                                }
 
-        self.alt_trade_data = {'base_pair': 'init',  # 'BTC' or 'USDT'
+        self.alt_trade_data = {'prev_day': datetime.utcnow().day,
+                               'base_pair': 'init',  # 'BTC' or 'USDT'
                                'max_trade_limit': 5,
                                'trading_alts': {}, # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
-                                                     'r3_quantity': 0,
-                                                     'r2_quantity': 0,
                                                      's1_quantity': 0,
-                                                     'limit_order_id': 0,
+                                                     'r3_filled': False,
+                                                     'r2_filled': False,
                                                      'stop_order_id': 0,
+                                                     'r3_order': {
+                                                         'order_list_id': 0,
+                                                         'limit_order_id': 0,
+                                                         'stop_order_id': 0,
+                                                     },
+                                                     'r2_order': {
+                                                         'order_list_id': 0,
+                                                         'limit_order_id': 0,
+                                                         'stop_order_id': 0,
+                                                     },
                                                      },
                                'open_alts': {},  # {ticker: open_alts_stat,}
                                'open_alts_stat': {'order_id': 0,
@@ -159,30 +169,41 @@ class BinanceAltBtcDayTrade:
         if not self.bo.check_exchange_status():
             self.logger.info('Exchange is Not Active. Exit Alt trade')
 
+        self.check_trading_alts()
         btc_status = self.btc_trade_data['btc_status']
         base_pair = self.alt_trade_data['base_pair']
         self.logger.info(f'Current alt base pair is \'{base_pair}\'')
-        # self.bo.cancel_all_order(oco=False)
+
+        trading_alts = list(self.alt_trade_data['trading_alts'].keys())
+        open_alts = list(self.alt_trade_data['open_alts'].keys())
+        if trading_alts:
+            self.logger.info(f'Current trading alts are {trading_alts}')
+        else:
+            self.logger.info('There is no trading alts')
+        if open_alts:
+            self.logger.info(f'Current open alts is {open_alts}')
+        else:
+            self.logger.info('There is no open alts')
+
         if btc_status == 'buy' and base_pair != 'BTC':
             self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
+            self.check_trading_alts()
             self.sell_invalid_alts()
             self.logger.info('Change ALT/pair to BTC')
             self.alt_trade_data['base_pair'] = 'BTC'
 
         elif btc_status == 'sell' and base_pair != 'USDT':
             self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
+            self.check_trading_alts()
             self.sell_invalid_alts()
             self.logger.info('Change ALT/pair to USDT')
             self.alt_trade_data['base_pair'] = 'USDT'
 
-        self.check_pivot_order()
-        trading_alts = list(self.alt_trade_data['trading_alts'].keys())
-        if trading_alts:
-            self.logger.info(f'Current trading alts are {trading_alts}')
-        else:
-            self.logger.info('There is no trading alts')
+        self.manage_pivot_order()
         if len(trading_alts) <= self.alt_trade_data['max_trade_limit']:
             self.make_pivot_order()
+
+        self.check_trading_alts()
         if len(self.alt_trade_data['trading_alts']) > 0:
             self.manage_trading_alts()
 
@@ -207,22 +228,24 @@ class BinanceAltBtcDayTrade:
         open_alts = self.alt_trade_data['open_alts']
         for ticker in open_alts:
             order_id = open_alts[ticker]['order_id']
-            order_info = self.bo.get_open_order_info(order_id)
+            order_info = self.bo.get_open_order_info(order_id, data_update=False)
             if order_info:
+                self.logger.info(f'{ticker}: Cancel open order')
                 self.bo.cancel_order(ticker, order_id)
         self.alt_trade_data['open_alts'] = dict()
         self.logger.info('Open alts is cleared')
 
-    def check_pivot_order(self, executed_quantity_ratio=0.5):
-        self.logger.info('Check open order located at pivot P.')
+    def manage_pivot_order(self, executed_quantity_ratio=0.5):
+        self.logger.info('Check open order located at pivot P')
         open_alts = list(self.alt_trade_data['open_alts'].keys())
         self.bo.update_open_order_data()
         self.bo.update_market_data()
         for open_alt in open_alts:
             order_id = self.alt_trade_data[open_alt]['order_id']
             open_order = self.bo.get_open_order_info(order_id, data_update=False)
-            if not open_order and self.bo.get_order_stat(order_id, open_alt) == 'filled':
-                self.logger.info(f'{open_alt}: Open order has been filled.')
+            order_stat = self.bo.get_order_stat(order_id, open_alt)
+            if not open_order and order_stat['status'] == 'filled':
+                self.logger.info(f'{open_alt}: Open order has been filled')
                 self.alt_trade_data['trading_alts'][open_alt] = self.alt_trade_data['trading_alts_stat'].copy()
                 del self.alt_trade_data['open_alts'][open_alt]
             else:
@@ -236,7 +259,7 @@ class BinanceAltBtcDayTrade:
                         self.alt_trade_data['trading_alts'][open_alt] = self.alt_trade_data['trading_alts_stat'].copy()
                         del self.alt_trade_data['open_alts'][open_alt]
                     else:
-                        self.logger.info(f'{open_alt}: Open order is created 1 hour before. Delete from open alts.')
+                        self.logger.info(f'{open_alt}: Open order is created 1 hour before. Delete from open alts')
                         self.bo.sell_at_market(open_alt)
                         del self.alt_trade_data['open_alts'][open_alt]
 
@@ -244,12 +267,11 @@ class BinanceAltBtcDayTrade:
             self.logger.info(f'Open alts is updated to {open_alts}')
 
     def make_pivot_order(self):
-        self.logger.info('Make pivot Order.')
+        self.logger.info('Trading alts is below max trade limit. Find valid alts to trade')
         base_pair = self.alt_trade_data['base_pair']
-        self.logger.info('Update market and ticker data.')
+        self.logger.info('Update market and ticker data')
         self.bo.update_market_data()
         self.bo.update_ticker_data()
-        self.logger.info('Trading alts is below max trade limit. Find valid alts to trade')
         tickers = self.bo.get_tickers_by_quote(base_pair, data_update=False)
         self.logger.info(f'{base_pair} pair ticker count: {len(tickers)}')
 
@@ -283,7 +305,7 @@ class BinanceAltBtcDayTrade:
             over_pivot_p_ticker_list = over_pivot_p_ticker_list[:(buy_max_limit - len(buy_triggered_ticker_list))]
 
         if buy_triggered_ticker_list:
-            self.logger.info('Buy under pivot ticker at market.')
+            self.logger.info('Buy under pivot ticker at market')
             for ticker in buy_triggered_ticker_list:
                 pair_balance = self.bo.get_balance(symbol=base_pair)
                 quantity = pair_balance/buy_max_limit
@@ -303,10 +325,7 @@ class BinanceAltBtcDayTrade:
                     self.bo.cancel_order(open_alt, open_alts[open_alt]['order_id'])
                     ticker, pair = open_alt.split('/')
                     balance = self.bo.get_balance(ticker)
-                    ticker_info = self.bo.get_ticker_info(open_alt, data_update=False)
-                    last_price = ticker_info['last_price']
-                    quote_balance = balance * last_price
-                    if self.bo.check_order_quantity(pair, quote_balance):
+                    if self.bo.check_order_quantity(pair, balance):
                         self.bo.sell_at_market(open_alt)
                     del self.alt_trade_data['open_alts'][open_alt]
 
@@ -322,14 +341,97 @@ class BinanceAltBtcDayTrade:
                 self.alt_trade_data['open_alts'][ticker] = self.alt_trade_data['open_alts_stat'].copy()
                 self.alt_trade_data['open_alts'][ticker]['order_id'] = order_result['id']
 
-            open_alts = list(self.alt_trade_data['open_alts'].keys())
-            self.logger.info(f'Current open alts is {open_alts}')
+            if open_alts != list(self.alt_trade_data['open_alts'].keys()):
+                self.logger.info(f'Open alts is updated to {open_alts}')
 
-    def manage_trading_alts(self, r2_quantity_ratio=0.2, r3_quantity_ratio=0.3):
-        self.logger.info('Manage pivot order.')
-        self.bo.cancel_all_order(normal=False)
+    def cancel_trading_alt_orders(self, trading_alt):
+        self.logger.info(f'{trading_alt}: Cancel open orders')
+        trading_alt_stat = self.alt_trade_data['trading_alts'][trading_alt]
+        self.bo.update_open_order_data()
+        if trading_alt_stat['stop_order_id']:
+            stop_order_id = trading_alt_stat['stop_order_id']
+            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            if stop_order_info:
+                self.logger.info(f'{trading_alt}: Cancel s1 stop order')
+                self.bo.cancel_order(trading_alt, stop_order_id)
+
+        r3_order = trading_alt_stat['r3_order']
+        if r3_order['order_list_id']:
+            stop_order_id = r3_order['stop_order_id']
+            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            if stop_order_info:
+                self.logger.info(f'{trading_alt}: Cancel r3 stop order')
+                self.bo.cancel_order(trading_alt, stop_order_id)
+
+            limit_order_id = r3_order['limit_order_id']
+            limit_order_info = self.bo.get_open_order_info(limit_order_id, data_update=False)
+            if limit_order_info:
+                self.logger.info(f'{trading_alt}: Cancel r3 limit order')
+                self.bo.cancel_order(trading_alt, limit_order_id)
+
+        r2_order = trading_alt_stat['r2_order']
+        if r2_order['order_list_id']:
+            stop_order_id = r2_order['stop_order_id']
+            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            if stop_order_info:
+                self.logger.info(f'{trading_alt}: Cancel r2 stop order')
+                self.bo.cancel_order(trading_alt, stop_order_id)
+
+            limit_order_id = r2_order['limit_order_id']
+            limit_order_info = self.bo.get_open_order_info(r2_order['limit_order_id'], data_update=False)
+            if limit_order_info:
+                self.logger.info(f'{trading_alt}: Cancel r2 limit order')
+                self.bo.cancel_order(trading_alt, limit_order_id)
+        self.logger.info(f'{trading_alt}: Canceled all open orders')
+
+    def check_trading_alts(self):
+        self.logger.info('Check trading alts status')
+        trading_alts = list(self.alt_trade_data['trading_alts'].keys())
+        for trading_alt in trading_alts:
+            ticker, pair = trading_alt.split('/')
+            balance = self.bo.get_balance(ticker)
+            trading_alt_stat = self.alt_trade_data['trading_alts'][trading_alt]
+            if not self.bo.check_order_quantity(trading_alt, balance):
+                self.cancel_trading_alt_orders(trading_alt)
+                del self.alt_trade_data['trading_alts'][trading_alt]
+                self.logger.info(f'{trading_alt} is deleted from trading alts')
+
+            total_stop_quantity = 0
+            if trading_alt_stat['total_quantity']:
+                if trading_alt_stat['stop_order_id']:
+                    stop_order_info = self.bo.get_order_stat(trading_alt_stat['stop_order_id'], trading_alt)
+                    total_stop_quantity += stop_order_info['executed_quantity']
+
+                r3_order = trading_alt_stat['r3_order']
+                if r3_order['order_list_id']:
+                    stop_order_info = self.bo.get_order_stat(r3_order['stop_order_id'], trading_alt)
+                    total_stop_quantity += stop_order_info['executed_quantity']
+                    limit_order_info = self.bo.get_order_stat(r3_order['limit_order_id'], trading_alt)
+                    trading_alt_stat['r3_quantity'] = limit_order_info['executed_quantity']
+                    if limit_order_info['status'] == 'filled':
+                        trading_alt_stat['r3_filled'] = True
+
+                r2_order = trading_alt_stat['r2_order']
+                if r2_order['order_list_id']:
+                    stop_order_info = self.bo.get_order_stat(r2_order['stop_order_id'], trading_alt)
+                    total_stop_quantity += stop_order_info['executed_quantity']
+                    limit_order_info = self.bo.get_order_stat(r2_order['limit_order_id'], trading_alt)
+                    trading_alt_stat['r2_quantity'] = limit_order_info['executed_quantity']
+                    if limit_order_info['status'] == 'filled':
+                        trading_alt_stat['r2_filled'] = True
+
+                trading_alt_stat['s1_quantity'] = total_stop_quantity
+
+    def manage_trading_alts(self, r2_quantity_ratio=0.2, r3_quantity_ratio=0.3, limit_price_ratio=0.1):
+        self.logger.info('Manage pivot order')
         trading_alts = list(self.alt_trade_data['trading_alts'].keys())
         self.bo.update_market_data()
+        day_now = datetime.utcnow().month
+        new_day = False
+        if self.alt_trade_data['prev_day'] is not day_now:
+            new_day = True
+            self.alt_trade_data['prev_day'] = day_now
+
         for trading_alt in trading_alts:
             trading_alt_stat = self.alt_trade_data['trading_alts'][trading_alt]
             ticker, pair = trading_alt.split('/')
@@ -337,16 +439,43 @@ class BinanceAltBtcDayTrade:
             internal_symbol = ticker_info['internal_symbol']
             last_price = ticker_info['last_price']
             ticker_balance = self.bo.get_balance(ticker)
+
+            pivot = self.bo.get_monthly_pivot(trading_alt)
+            r3_price = pivot['r3']
+            r2_price = pivot['r2']
+            pivot_price = pivot['p']
+            stop_price = pivot['s1']
+            stop_limit_price = stop_price * (1 - limit_price_ratio)
+
             if not trading_alt_stat['total_quantity']:
                 trading_alt_stat['total_quantity'] = ticker_balance
-            pivot = self.bo.get_monthly_pivot(trading_alt)
-            stop_price = pivot['s1']
-            self.bo.create_order()
-            self.bo.create_oco_order(internal_symbol, 'buy', internal_symbol=True)
+                if last_price <= stop_price:
+                    self.logger.info(f'{trading_alt}: Last price is under Pivot s1')
+                    self.bo.sell_at_market(trading_alt)
+                    del self.alt_trade_data['trading_alts'][trading_alt]
+                    self.logger.info(f'{trading_alt} is deleted from trading alts')
+                    continue
+
+            if last_price < pivot_price and new_day:
+                self.logger.info(f'{trading_alt}: Previous daily close price is under pivot P')
+                self.bo.sell_at_market(trading_alt)
+                del self.alt_trade_data['trading_alts'][trading_alt]
+                self.logger.info(f'{trading_alt} is deleted from trading alts')
+                continue
 
 
 
-        # 손절가에 Stop Limit 오더 배치 (Stop 에서 최대 -10% 까지 Limit)
+            r2_amount = trading_alt_stat['total_quantity'] * r2_quantity_ratio
+            r3_amount = trading_alt_stat['total_quantity'] * r3_quantity_ratio
+
+
+
+            if not trading_alt_stat['stop_order_id']:
+                self.bo.create_order(
+                    trading_alt, 'sell', price=limit_price, stop_price=stop_price, order_type='stop_limit')
+            if not trading_alt_stat['r2_order']['order_list_id']:
+
+                self.bo.create_oco_order(internal_symbol, 'sell', internal_symbol=True)
 
     def is_valid_alt(self, symbol, data_update=True):
         if not self.bo.check_ticker_status(symbol, data_update=data_update):
@@ -379,11 +508,11 @@ class BinanceAltBtcDayTrade:
         return True
 
     def sell_invalid_alts(self):
-        self.logger.info('Sell invalid alts.')
+        self.logger.info('Sell invalid alts')
         btc_base_symbol = self.btc_trade_data['base_symbol']
 
         if len(self.alt_trade_data['trading_alts']):
-            self.logger.info('No trading alts.')
+            self.logger.info('No trading alts')
             return
 
         trading_alts = list(self.alt_trade_data['trading_alts'].keys())
@@ -392,8 +521,7 @@ class BinanceAltBtcDayTrade:
             if pair == 'USDT':
                 btc_symbol = ticker + '/BTC'
                 if self.is_valid_alt(btc_symbol):
-                    # TODO
-                    # cancel trading alts order
+                    self.cancel_trading_alt_orders(symbol)
                     del self.alt_trade_data['trading_alts'][symbol]
                     self.alt_trade_data['trading_alts'][btc_symbol] = self.alt_trade_data['trading_alts_stat'].copy()
                 else:
@@ -403,8 +531,7 @@ class BinanceAltBtcDayTrade:
             elif pair == 'BTC':
                 usdt_symbol = ticker + '/BTC'
                 if self.is_valid_alt(usdt_symbol):
-                    # TODO
-                    # cancel trading alts order and make new one
+                    self.cancel_trading_alt_orders(symbol)
                     del self.alt_trade_data['trading_alts'][symbol]
                     self.alt_trade_data['trading_alts'][usdt_symbol] = self.alt_trade_data['trading_alts_stat'].copy()
                 else:
@@ -413,7 +540,7 @@ class BinanceAltBtcDayTrade:
                     if not self.bo.sell_at_market(btc_base_symbol):
                         raise Exception(f'Cannot sell {btc_base_symbol} at market')
 
-        self.logger.info('Sold all invalid alts.')
+        self.logger.info('Sold all invalid alts')
 
 
 def setup_logger(name):
