@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 import os.path
 from pprint import pprint
-from binance_alt_btc_day.binance_order import BinanceOrder
+from binance_order import BinanceOrder
 from copy import deepcopy
 
 
