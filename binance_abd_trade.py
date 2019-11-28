@@ -287,6 +287,9 @@ class BinanceAltBtcDayTrade:
         over_pivot_p_ticker_list = []
         buy_triggered_ticker_list = []
         for ticker in valid_ticker_list:
+            buy_max_limit = self.alt_trade_data['max_trade_limit'] - len(self.alt_trade_data['trading_alts'])
+            if buy_max_limit <= (len(over_pivot_p_ticker_list) + len(buy_triggered_ticker_list)):
+                break
             pivot = self.bo.get_monthly_pivot(ticker)
             ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
             if not pivot:
@@ -301,11 +304,6 @@ class BinanceAltBtcDayTrade:
                     buy_triggered_ticker_list.append(ticker)
         self.logger.info(f'Buy triggered ticker count: {len(buy_triggered_ticker_list)}')
         self.logger.info(f'Over pivot p ticker count: {len(over_pivot_p_ticker_list)}')
-
-        buy_max_limit = self.alt_trade_data['max_trade_limit'] - len(self.alt_trade_data['trading_alts'])
-        buy_triggered_ticker_list = buy_triggered_ticker_list[:buy_max_limit]
-        if len(buy_triggered_ticker_list) < buy_max_limit:
-            over_pivot_p_ticker_list = over_pivot_p_ticker_list[:(buy_max_limit - len(buy_triggered_ticker_list))]
 
         if buy_triggered_ticker_list:
             self.logger.info('Buy under pivot ticker at market')
