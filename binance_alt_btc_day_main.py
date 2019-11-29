@@ -26,7 +26,7 @@ def setup_logger(name):
     return logger
 
 
-logger = setup_logger()
+logger = setup_logger('binance_alt_btc_day_main')
 logger.info('Set up Binance Alt Btc Day Trading...')
 
 with open('api/binance_kjss970_naver.txt', 'r') as f:
