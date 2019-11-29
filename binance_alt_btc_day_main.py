@@ -19,7 +19,8 @@ def setup_logger(name):
     stream_handler.setFormatter(formatter)
     logger.addHandler(stream_handler)
 
-    rotate_handler = handlers.TimedRotatingFileHandler(filename=log_dir, when='midnight', interval=1, encoding='utf-8')
+    rotate_handler = handlers.TimedRotatingFileHandler(
+        filename=log_dir+name+'.log', when='midnight', interval=1, encoding='utf-8')
     rotate_handler.setFormatter(formatter)
     logger.addHandler(rotate_handler)
 
