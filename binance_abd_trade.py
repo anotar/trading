@@ -317,7 +317,7 @@ class BinanceAltBtcDayTrade:
 
         if over_pivot_p_ticker_list:
             self.logger.info('Make order at pivot P')
-            open_alts = self.alt_trade_data['open_alts']
+            open_alts = list(self.alt_trade_data['open_alts'].keys())
 
             for open_alt in open_alts:
                 if open_alt not in over_pivot_p_ticker_list:
@@ -342,8 +342,9 @@ class BinanceAltBtcDayTrade:
                 self.alt_trade_data['open_alts'][ticker] = deepcopy(self.alt_trade_data['open_alts_stat'])
                 self.alt_trade_data['open_alts'][ticker]['order_id'] = int(order_result['id'])
 
-            if open_alts.keys() != self.alt_trade_data['open_alts'].keys():
-                self.logger.info(f'Open alts is updated to {list(open_alts.keys())}')
+            new_open_alts = list(self.alt_trade_data['open_alts'].keys())
+            if open_alts != new_open_alts:
+                self.logger.info(f'Open alts is updated to {new_open_alts}')
         self.logger.info('Exit making pivot order sequence')
 
     def cancel_trading_alt_orders(self, trading_alt):
