@@ -286,8 +286,8 @@ class BinanceAltBtcDayTrade:
 
         over_pivot_p_ticker_list = []
         buy_triggered_ticker_list = []
+        buy_max_limit = self.alt_trade_data['max_trade_limit'] - len(self.alt_trade_data['trading_alts'])
         for ticker in valid_ticker_list:
-            buy_max_limit = self.alt_trade_data['max_trade_limit'] - len(self.alt_trade_data['trading_alts'])
             if buy_max_limit <= (len(over_pivot_p_ticker_list) + len(buy_triggered_ticker_list)):
                 break
             pivot = self.bo.get_monthly_pivot(ticker)
@@ -310,6 +310,7 @@ class BinanceAltBtcDayTrade:
             for ticker in buy_triggered_ticker_list:
                 pair_balance = self.bo.get_balance(symbol=base_pair)
                 quantity = pair_balance/buy_max_limit
+                buy_max_limit -= 1
                 self.bo.buy_at_market(ticker, pair_quantity=quantity)
                 self.alt_trade_data['trading_alts'][ticker] = self.alt_trade_data['trading_alts_stat']
             trading_alts = list(self.alt_trade_data['trading_alts'].keys())
@@ -337,6 +338,7 @@ class BinanceAltBtcDayTrade:
                 pair_balance = self.bo.get_balance(symbol=base_pair, balance_type='free')
                 pivot = self.bo.get_monthly_pivot(ticker)
                 quantity = pair_balance / buy_max_limit / pivot['p']
+                buy_max_limit -= 1
                 order_result = self.bo.create_order(ticker, 'buy', quantity, price=pivot['p'], order_type='limit')
                 self.logger.info(f'Order result: {order_result}')
                 self.alt_trade_data['open_alts'][ticker] = deepcopy(self.alt_trade_data['open_alts_stat'])
