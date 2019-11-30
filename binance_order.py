@@ -290,6 +290,11 @@ class BinanceOrder:
         return True
 
     def create_order(self, symbol, side, amount, price=0, stop_price=0, order_type='market'):
+        amount = self.binance.amount_to_precision(symbol, amount)
+        if price:
+            price = self.binance.price_to_precision(symbol, price)
+        if stop_price:
+            stop_price = self.binance.price_to_precision(symbol, stop_price)
         if order_type == 'market':
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}')
             return self.binance.create_order(symbol, order_type, side, amount)
