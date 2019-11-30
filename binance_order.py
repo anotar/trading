@@ -416,6 +416,40 @@ class BinanceOrder:
                 is_open = False
         return True if max_try else False
 
+    def _try_until_timeout(self, func, *args, **kwargs):
+        timeout = 5
+        overload_error_message = 'The system is currently overloaded. Please try again later.'
+        validation_error_name = 'ValidationError'
+        rate_limit_error_name = 'RateLimitError'
+        while timeout:
+            try:
+                func_result = func(*args, **kwargs)
+                return func_result
+            except ccxt.InsufficientFunds as err:
+                self.logger.error(f'InsufficientFunds Error: {err}')
+                return 'InsufficientFunds'
+            raise NotImplementedError
+            # TODO: revise the code
+            except Exception as err:
+                if overload_error_message in e.args[0]:
+                    self.logger.error('Bitmex is currently overloaded. Try again after 500ms. Remaining try: {}'
+                                      .format(timeout - 1))
+                    timeout -= 1
+                    if timeout == 0:
+                        self.logger.error('Timeout Error: {}'.format(e))
+                        return 'timeout'
+                    sleep(0.5)
+                elif validation_error_name in e.args[0]:
+                    self.logger.error('Validation Error: {}'.format(e))
+                    return 'ValidationError'
+                elif rate_limit_error_name in e.args[0]:
+                    self.logger.error('RateLimitError occurred. Sleep 60 seconds.')
+                    sleep(60)
+                    return 'RateLimitError'
+                else:
+                    self.logger.error('Logging unexpected error message: {}'.format(e.args[0]))
+                    return 'UnexpectedError'
+
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'

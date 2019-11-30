@@ -111,7 +111,7 @@ class BinanceAltBtcDayTrade:
         if self.check_seconds('btc_trade', 1, time_type='day'):
             self.btc_trade()
 
-        if self.check_seconds('alt_trade', 1, time_type='minute'):  # 1 hour in practice
+        if self.check_seconds('alt_trade', 1, time_type='hour'):
             self.alt_trade()
 
     def btc_trade(self):
@@ -322,9 +322,9 @@ class BinanceAltBtcDayTrade:
         if over_pivot_p_ticker_list:
             self.logger.info('Make order at pivot P')
             open_alts = self.alt_trade_data['open_alts']
-            prev_open_alts_list = list(self.alt_trade_data['open_alts'].keys())
+            open_alts_list = list(self.alt_trade_data['open_alts'].keys())
 
-            for open_alt in open_alts:
+            for open_alt in open_alts_list:
                 if open_alt not in over_pivot_p_ticker_list:
                     self.logger.info(f'{open_alt} is not in open alts. Delete from open alts')
                     self.logger.info(f'{open_alt}: Cancel open order')
@@ -352,7 +352,7 @@ class BinanceAltBtcDayTrade:
                 self.alt_trade_data['open_alts'][ticker]['order_id'] = int(order_result['id'])
 
             new_open_alts_list = list(self.alt_trade_data['open_alts'].keys())
-            if prev_open_alts_list != new_open_alts_list:
+            if open_alts_list != new_open_alts_list:
                 self.logger.info(f'Open alts is updated to {new_open_alts_list}')
         self.logger.info('Exit making pivot order sequence')
 
