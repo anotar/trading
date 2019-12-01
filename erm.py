@@ -1,21 +1,10 @@
-import ccxt
-import logging
-
-
-class testT:
-    def __init__(self):
-        self.a = 0
-
-    def _try_until_timeout(self, func, *args, **kwargs):
-        func(*args, **kwargs)
-        self.a = 1
-
-    def test_func(self, a, b, c=0):
-        print(a,b,c)
-
-    def test(self):
-        self._try_until_timeout(self.test_func, 1, 5, c=10)
-
-
-t = testT()
-t.test()
+import pandas as pd
+dict_t = {'a': 1, 'b':2}
+list_t = [1,2,3,]
+data = pd.Series(list)
+if dict_t:
+    print(1)
+if list_t:
+    print(2)
+if data.empty:
+    print(data)

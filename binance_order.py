@@ -29,6 +29,9 @@ class BinanceOrder:
         self.btc_minimum_order_size = 0.001 * 1.3
         self.usdt_minimum_order_size = 10 * 1.3
 
+        self.error_result = ['InsufficientFunds', 'InvalidOrder', 'RateLimitExceeded',
+                             'RequestTimeout', 'BaseError', 'UnexpectedError']
+
         self.logger.info('Binance Order Module Setup Completed')
 
     def show_basic_info(self):
@@ -53,6 +56,8 @@ class BinanceOrder:
 
     def check_exchange_status(self):
         exchange_status = self._try_until_timeout(self.binance.fetch_status)
+        if exchange_status in self.error_result:
+            return False
         status = exchange_status['status']
         if status == 'ok':
             return True
@@ -60,14 +65,24 @@ class BinanceOrder:
             return False
 
     def update_market_data(self):
-        self.market_data = self._try_until_timeout(self.binance.load_markets)
+        market_data = self._try_until_timeout(self.binance.load_markets)
+        if market_data in self.error_result:
+            return False
+        self.market_data = market_data
+        return True
 
     def update_ticker_data(self):
-        self.ticker_data = self._try_until_timeout(self.binance.publicGetTicker24hr)
+        ticker_data = self._try_until_timeout(self.binance.publicGetTicker24hr)
+        if ticker_data in self.error_result:
+            return False
+        self.ticker_data = ticker_data
+        return True
 
     def check_ticker_status(self, symbol, data_update=True):
         if data_update:
             market_data = self._try_until_timeout(self.binance.load_markets)
+            if market_data in self.error_result:
+                return False
         else:
             market_data = self.market_data
         if symbol not in market_data.keys():
@@ -81,8 +96,12 @@ class BinanceOrder:
 
     def get_ticker_info(self, symbol, data_update=True):
         ticker_data = self._try_until_timeout(self.binance.fetch_ticker, symbol)
+        if ticker_data in self.error_result:
+            return False
         if data_update:
             market_data = self._try_until_timeout(self.binance.load_markets)
+            if market_data in self.error_result:
+                return False
         else:
             market_data = self.market_data
         ticker_info = dict()
@@ -111,12 +130,16 @@ class BinanceOrder:
                     break
             if not is_valid_symbol:
                 ticker_info = self.get_ticker_info(original_symbol)
+                if ticker_info in self.error_result:
+                    return False
                 symbol = ticker_info['internal_symbol']
 
         ticker_24hr_stat = dict()
         if data_update:
             param = {'symbol': symbol}
             ticker_24hr_stat = self._try_until_timeout(self.binance.publicGetTicker24hr, param)
+            if ticker_24hr_stat in self.error_result:
+                return False
         else:
             for data in self.ticker_data:
                 if symbol == data['symbol']:
@@ -124,7 +147,7 @@ class BinanceOrder:
                     break
 
         if not ticker_24hr_stat:
-            raise ValueError(f'Received {symbol}. ticker is invalid')
+            raise ValueError(f'Received {symbol}. Ticker is invalid')
 
         ticker_stat = dict()
         ticker_stat['last_price'] = float(ticker_24hr_stat['lastPrice'])
@@ -135,6 +158,8 @@ class BinanceOrder:
     def get_tickers_by_quote(self, quote, data_update=True):
         if data_update:
             market_data = self._try_until_timeout(self.binance.load_markets)
+            if market_data in self.error_result:
+                return False
         else:
             market_data = self.market_data
         ticker_list = []
@@ -149,6 +174,8 @@ class BinanceOrder:
             ohlcv_original = self._try_until_timeout(self.binance.fetch_ohlcv, symbol, interval, limit=limit)
         else:
             ohlcv_original = self._try_until_timeout(self.binance.fetch_ohlcv, symbol, interval)
+        if ohlcv_original in self.error_result:
+            return pd.DataFrame()
         ohlcv = pd.DataFrame()
         ohlcv['timestamp'] = [int(ohlcv_list[0]/1000) for ohlcv_list in ohlcv_original]
         ohlcv['open'] = [ohlcv_list[1] for ohlcv_list in ohlcv_original]
@@ -180,7 +207,9 @@ class BinanceOrder:
         return pivot
 
     def get_yearly_pivot(self, symbol):
-        ohlcv = self.get_ohlcv(symbol, '1M')
+        ohlcv = self.get_ohlcv(symbol, '1M', limit=5)
+        if ohlcv.empty:
+            return False
         if ohlcv.loc[ohlcv['year'] != datetime.utcnow().year].empty:
             return False
         ohlcv = ohlcv.loc[ohlcv['year'] == datetime.utcnow().year-1]
@@ -191,7 +220,9 @@ class BinanceOrder:
         return pivot
 
     def get_monthly_pivot(self, symbol):
-        ohlcv = self.get_ohlcv(symbol, '1M')
+        ohlcv = self.get_ohlcv(symbol, '1M', limit=5)
+        if ohlcv.empty:
+            return False
         if not len(ohlcv) > 1:
             return False
         high = ohlcv['high'].iloc[-2]
@@ -202,6 +233,8 @@ class BinanceOrder:
 
     def get_balance(self, symbol=False, balance_type='total'):
         balance = self._try_until_timeout(self.binance.fetch_balance)
+        if balance in self.error_result:
+            return balance
         if symbol:
             if balance_type == 'total':
                 return balance[symbol]['total']
@@ -210,12 +243,14 @@ class BinanceOrder:
             elif balance_type == 'used':
                 return balance[symbol]['used']
             else:
-                raise NameError(f'Received {balance_type=}')
+                raise ValueError(f'Received {balance_type}. Balance type is invalid')
         else:
             return balance
 
     def get_open_orders(self):
         open_orders = self._try_until_timeout(self.binance.privateGetOpenOrders)
+        if open_orders in self.error_result:
+            return False
         if open_orders:
             return [{'order_id': int(open_order['orderId']),
                      'order_list_id': int(open_order['orderListId']),
@@ -226,15 +261,22 @@ class BinanceOrder:
                      }
                     for open_order in open_orders]
         else:
-            return []
+            return False
 
     def update_open_order_data(self):
-        self.open_order_data = self.get_open_orders()
+        open_order_data = self.get_open_orders()
+        if open_order_data:
+            self.open_order_data = open_order_data
+            return True
+        else:
+            return False
 
     def get_open_order_info(self, order_id, data_update=True):
         order_id = int(order_id)
         if data_update:
             open_orders = self.get_open_orders()
+            if not open_orders:
+                return False
         else:
             open_orders = self.open_order_data
         for open_order in open_orders:
@@ -244,6 +286,8 @@ class BinanceOrder:
 
     def get_order_stat(self, order_id, symbol):
         order_data = self._try_until_timeout(self.binance.fetch_order, order_id, symbol=symbol)
+        if order_data in self.error_result:
+            return False
         order_stat = {'status': order_data['info']['status'].lower(),  # type: new, partially_filled, filled, canceled
                       'executed_quantity': float(order_data['info']['executedQty']),
                       }
@@ -252,12 +296,24 @@ class BinanceOrder:
     def cancel_order(self, symbol, order_id, order_list_id=-1, internal_symbol=False):
         if order_list_id != -1:
             param = {'symbol': symbol, 'orderListId': order_list_id}
-            return self._try_until_timeout(self.binance.privateDeleteOrderList, param)
+            order_result = self._try_until_timeout(self.binance.privateDeleteOrderList, param)
+            if order_result in self.error_result:
+                return False
+            else:
+                return order_result
         elif internal_symbol:
             param = {'symbol': symbol, 'orderId': order_id}
-            return self._try_until_timeout(self.binance.privateDeleteOrder, param)
+            order_result = self._try_until_timeout(self.binance.privateDeleteOrderList, param)
+            if order_result in self.error_result:
+                return False
+            else:
+                return order_result
         else:
-            return self._try_until_timeout(self.binance.cancel_order, str(order_id), symbol)
+            order_result =  self._try_until_timeout(self.binance.cancel_order, str(order_id), symbol)
+            if order_result in self.error_result:
+                return False
+            else:
+                return order_result
 
     def cancel_all_order(self, normal=True, oco=True):
         if oco:
@@ -286,7 +342,10 @@ class BinanceOrder:
                     continue
             result = self.cancel_order(internal_symbol, order_id, order_list_id=order_list_id, internal_symbol=True)
             result_list.append(result)
-        self.logger.info(f'Cancel result: {result_list}')
+        if result_list:
+            self.logger.info(f'Cancel result: {result_list}')
+        else:
+            self.logger.info('Nothing to cancel')
         return True
 
     def create_order(self, symbol, side, amount, price=0, stop_price=0, order_type='market'):
@@ -297,23 +356,44 @@ class BinanceOrder:
             stop_price = self.binance.price_to_precision(symbol, stop_price)
         if order_type == 'market':
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}')
-            return self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount)
+            order_result = self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount)
+            if order_result == 'InsufficientFunds':
+                return order_result
+            elif order_result in self.error_result:
+                return False
+            else:
+                return order_result
         elif order_type == 'limit' and price:
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}')
-            return self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount, price)
+            order_result = self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount, price)
+            if order_result == 'InsufficientFunds':
+                return order_result
+            elif order_result in self.error_result:
+                return False
+            else:
+                return order_result
         elif order_type == 'stop_limit' and price and stop_price:
             stop_price = self.binance.price_to_precision(symbol, stop_price)
             params = {'stopPrice': stop_price,
                       'type': 'STOP_LOSS_LIMIT',
                       }
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {params=}')
-            return self._try_until_timeout(self.binance.create_order, symbol, 'limit', side, amount, price, params)
+            order_result = self._try_until_timeout(self.binance.create_order, symbol, 'limit',
+                                                   side, amount, price, params)
+            if order_result == 'InsufficientFunds':
+                return order_result
+            elif order_result in self.error_result:
+                return False
+            else:
+                return order_result
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
     def create_oco_order(self, symbol, side, amount, price, stop_price, limit_price, time_in_force='GTC'):
         side = side.upper()
         ticker_info = self.get_ticker_info(symbol)
+        if not ticker_info:
+            return False
         internal_symbol = ticker_info['internal_symbol']
         amount = self.binance.amount_to_precision(symbol, amount)
         price = self.binance.price_to_precision(symbol, price)
@@ -327,12 +407,18 @@ class BinanceOrder:
                   'stopPrice': stop_price,
                   'stopLimitPrice': limit_price,
                   'stopLimitTimeInForce': time_in_force}
-        return self._try_until_timeout(self.binance.privatePostOrderOco, params)
+        order_result = self._try_until_timeout(self.binance.privatePostOrderOco, params)
+        if order_result in self.error_result:
+            return False
+        else:
+            return order_result
 
     def get_orderbook(self, symbol, limit=100):
         if limit > 5000:
             raise ValueError('Orderbook limit must be under 5000.')
         orderbook_data = self._try_until_timeout(self.binance.fetch_order_book, symbol, limit)
+        if orderbook_data in self.error_result:
+            return False
         orderbook = dict()
         orderbook['asks'] = orderbook_data['asks']
         orderbook['bids'] = orderbook_data['bids']
@@ -340,6 +426,8 @@ class BinanceOrder:
 
     def check_order_quantity(self, symbol, quantity):
         ticker_info = self.get_ticker_info(symbol, data_update=False)
+        if not ticker_info:
+            return False
         step_size = ticker_info['step_size']
         last_price = ticker_info['last_price']
         quote_quantity = quantity * last_price
@@ -361,6 +449,8 @@ class BinanceOrder:
         ticker, pair = symbol.split('/')
         if not quantity:
             quantity = self.get_balance(symbol=ticker, balance_type='free')
+            if quantity in self.error_result:
+                return False
         if not self.check_order_quantity(symbol, quantity):
             self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
             return False
@@ -368,6 +458,8 @@ class BinanceOrder:
         self.logger.info(f'{ticker} Quantity: {quantity}')
 
         order_result = self.create_order(symbol, 'sell', quantity)
+        if not order_result or order_result == 'InsufficientFunds':
+            return False
         self.logger.info(f'Order result: {order_result}')
         return True
 
@@ -376,6 +468,8 @@ class BinanceOrder:
         ticker, pair = symbol.split('/')
         if not pair_quantity:
             pair_quantity = self.get_balance(symbol=pair)
+            if pair_quantity in self.error_result:
+                return False
         ticker_info = self.get_ticker_info(symbol, data_update=False)
         last_price = ticker_info['last_price']
         quantity = pair_quantity / last_price
@@ -384,11 +478,12 @@ class BinanceOrder:
             return False
 
         orderbook_limit = 100
-        is_open = True
         max_try = 10
-        while is_open and max_try:
+        while max_try:
             max_try -= 1
             orderbook = self.get_orderbook(symbol, limit=orderbook_limit)
+            if not orderbook:
+                return False
             ask_volume = 0
             ask_quantity = 0
             weighted_ask_price = 0
@@ -405,15 +500,13 @@ class BinanceOrder:
 
             self.logger.info(f'{symbol} Weighted average ask price: {weighted_ask_price}')
             amount = pair_quantity / weighted_ask_price
-            try:
-                order_result = self.create_order(symbol, 'buy', amount)
-            except ccxt.InsufficientFunds:
+            order_result = self.create_order(symbol, 'buy', amount)
+            if not order_result:
+                return False
+            elif order_result == 'InsufficientFunds':
                 self.logger.info(f'Insufficient funds when market buying. '
                                  f'Try again after 500ms. Remaining Try: {max_try}')
                 sleep(0.5)
-            else:
-                self.logger.info(f'Order result: {order_result}')
-                is_open = False
         return True if max_try else False
 
     def _try_until_timeout(self, func, *args, **kwargs):

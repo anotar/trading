@@ -292,9 +292,9 @@ class BinanceAltBtcDayTrade:
             if buy_max_limit <= (len(over_pivot_p_ticker_list) + len(buy_triggered_ticker_list)):
                 break
             pivot = self.bo.get_monthly_pivot(ticker)
-            ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
             if not pivot:
                 continue
+            ticker_info = self.bo.get_ticker_statistics(ticker, data_update=False)
             ohlcv = self.bo.get_ohlcv(ticker, '1d', limit=10)
             prev_close = ohlcv.iloc[-2]['close']
             last_price = ticker_info['last_price']
