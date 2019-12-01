@@ -52,7 +52,7 @@ class BinanceOrder:
         pprint(self.binance.fetch_markets())
 
     def check_exchange_status(self):
-        exchange_status = self.binance.fetch_status()
+        exchange_status = self._try_until_timeout(self.binance.fetch_status)
         status = exchange_status['status']
         if status == 'ok':
             return True
@@ -60,14 +60,14 @@ class BinanceOrder:
             return False
 
     def update_market_data(self):
-        self.market_data = self.binance.load_markets()
+        self.market_data = self._try_until_timeout(self.binance.load_markets)
 
     def update_ticker_data(self):
-        self.ticker_data = self.binance.publicGetTicker24hr()
+        self.ticker_data = self._try_until_timeout(self.binance.publicGetTicker24hr)
 
     def check_ticker_status(self, symbol, data_update=True):
         if data_update:
-            market_data = self.binance.load_markets()
+            market_data = self._try_until_timeout(self.binance.load_markets)
         else:
             market_data = self.market_data
         if symbol not in market_data.keys():
@@ -80,9 +80,9 @@ class BinanceOrder:
             return False
 
     def get_ticker_info(self, symbol, data_update=True):
-        ticker_data = self.binance.fetch_ticker(symbol)
+        ticker_data = self._try_until_timeout(self.binance.fetch_ticker, symbol)
         if data_update:
-            market_data = self.binance.load_markets()
+            market_data = self._try_until_timeout(self.binance.load_markets)
         else:
             market_data = self.market_data
         ticker_info = dict()
@@ -116,7 +116,7 @@ class BinanceOrder:
         ticker_24hr_stat = dict()
         if data_update:
             param = {'symbol': symbol}
-            ticker_24hr_stat = self.binance.publicGetTicker24hr(param)
+            ticker_24hr_stat = self._try_until_timeout(self.binance.publicGetTicker24hr, param)
         else:
             for data in self.ticker_data:
                 if symbol == data['symbol']:
@@ -134,7 +134,7 @@ class BinanceOrder:
 
     def get_tickers_by_quote(self, quote, data_update=True):
         if data_update:
-            market_data = self.binance.load_markets()
+            market_data = self._try_until_timeout(self.binance.load_markets)
         else:
             market_data = self.market_data
         ticker_list = []
@@ -146,9 +146,9 @@ class BinanceOrder:
 
     def get_ohlcv(self, symbol, interval, limit=False):
         if limit:
-            ohlcv_original = self.binance.fetch_ohlcv(symbol, interval, limit=limit)
+            ohlcv_original = self._try_until_timeout(self.binance.fetch_ohlcv, symbol, interval, limit=limit)
         else:
-            ohlcv_original = self.binance.fetch_ohlcv(symbol, interval)
+            ohlcv_original = self._try_until_timeout(self.binance.fetch_ohlcv, symbol, interval)
         ohlcv = pd.DataFrame()
         ohlcv['timestamp'] = [int(ohlcv_list[0]/1000) for ohlcv_list in ohlcv_original]
         ohlcv['open'] = [ohlcv_list[1] for ohlcv_list in ohlcv_original]
@@ -201,7 +201,7 @@ class BinanceOrder:
         return pivot
 
     def get_balance(self, symbol=False, balance_type='total'):
-        balance = self.binance.fetch_balance()
+        balance = self._try_until_timeout(self.binance.fetch_balance)
         if symbol:
             if balance_type == 'total':
                 return balance[symbol]['total']
@@ -215,7 +215,7 @@ class BinanceOrder:
             return balance
 
     def get_open_orders(self):
-        open_orders = self.binance.privateGetOpenOrders()
+        open_orders = self._try_until_timeout(self.binance.privateGetOpenOrders)
         if open_orders:
             return [{'order_id': int(open_order['orderId']),
                      'order_list_id': int(open_order['orderListId']),
@@ -243,7 +243,7 @@ class BinanceOrder:
         return False
 
     def get_order_stat(self, order_id, symbol):
-        order_data = self.binance.fetch_order(order_id, symbol=symbol)
+        order_data = self._try_until_timeout(self.binance.fetch_order, order_id, symbol=symbol)
         order_stat = {'status': order_data['info']['status'].lower(),  # type: new, partially_filled, filled, canceled
                       'executed_quantity': float(order_data['info']['executedQty']),
                       }
@@ -252,12 +252,12 @@ class BinanceOrder:
     def cancel_order(self, symbol, order_id, order_list_id=-1, internal_symbol=False):
         if order_list_id != -1:
             param = {'symbol': symbol, 'orderListId': order_list_id}
-            return self.binance.privateDeleteOrderList(param)
+            return self._try_until_timeout(self.binance.privateDeleteOrderList, param)
         elif internal_symbol:
             param = {'symbol': symbol, 'orderId': order_id}
-            return self.binance.privateDeleteOrder(param)
+            return self._try_until_timeout(self.binance.privateDeleteOrder, param)
         else:
-            return self.binance.cancel_order(str(order_id), symbol)
+            return self._try_until_timeout(self.binance.cancel_order, str(order_id), symbol)
 
     def cancel_all_order(self, normal=True, oco=True):
         if oco:
@@ -297,17 +297,17 @@ class BinanceOrder:
             stop_price = self.binance.price_to_precision(symbol, stop_price)
         if order_type == 'market':
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}')
-            return self.binance.create_order(symbol, order_type, side, amount)
+            return self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount)
         elif order_type == 'limit' and price:
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}')
-            return self.binance.create_order(symbol, order_type, side, amount, price)
+            return self._try_until_timeout(self.binance.create_order, symbol, order_type, side, amount, price)
         elif order_type == 'stop_limit' and price and stop_price:
             stop_price = self.binance.price_to_precision(symbol, stop_price)
             params = {'stopPrice': stop_price,
                       'type': 'STOP_LOSS_LIMIT',
                       }
             self.logger.info(f'Create Order: {symbol=}, {side=}, {amount=}, {price=}, {params=}')
-            return self.binance.create_order(symbol, 'limit', side, amount, price, params)
+            return self._try_until_timeout(self.binance.create_order, symbol, 'limit', side, amount, price, params)
         else:
             raise NameError(f'Received {order_type=},{price=},{stop_price=}')
 
@@ -327,12 +327,12 @@ class BinanceOrder:
                   'stopPrice': stop_price,
                   'stopLimitPrice': limit_price,
                   'stopLimitTimeInForce': time_in_force}
-        return self.binance.privatePostOrderOco(params)
+        return self._try_until_timeout(self.binance.privatePostOrderOco, params)
 
     def get_orderbook(self, symbol, limit=100):
         if limit > 5000:
             raise ValueError('Orderbook limit must be under 5000.')
-        orderbook_data = self.binance.fetch_order_book(symbol, limit)
+        orderbook_data = self._try_until_timeout(self.binance.fetch_order_book, symbol, limit)
         orderbook = dict()
         orderbook['asks'] = orderbook_data['asks']
         orderbook['bids'] = orderbook_data['bids']
@@ -418,9 +418,6 @@ class BinanceOrder:
 
     def _try_until_timeout(self, func, *args, **kwargs):
         timeout = 5
-        overload_error_message = 'The system is currently overloaded. Please try again later.'
-        validation_error_name = 'ValidationError'
-        rate_limit_error_name = 'RateLimitError'
         while timeout:
             try:
                 func_result = func(*args, **kwargs)
@@ -428,27 +425,26 @@ class BinanceOrder:
             except ccxt.InsufficientFunds as err:
                 self.logger.error(f'InsufficientFunds Error: {err}')
                 return 'InsufficientFunds'
-            raise NotImplementedError
-            # TODO: revise the code
+            except ccxt.InvalidOrder as err:
+                self.logger.error(f'InvalidOrder Error: {err}')
+                return 'InvalidOrder'
+            except ccxt.RateLimitExceeded as err:
+                self.logger.error(f'RateLimitExceeded Error: {err}')
+                sleep(60)
+                return 'RateLimitExceeded'
+            except ccxt.RequestTimeout as err:
+                timeout -= 1
+                self.logger.warning(f'RequestTimeout Error occurred. Try again after 500ms. Remaining try: {timeout}')
+                if timeout == 0:
+                    self.logger.error(f'RequestTimeout Error: {err}')
+                    return 'RequestTimeout'
+                sleep(0.5)
+            except ccxt.BaseError as err:
+                self.logger.error(f'BaseError error: {err}')
+                return 'BaseError'
             except Exception as err:
-                if overload_error_message in e.args[0]:
-                    self.logger.error('Bitmex is currently overloaded. Try again after 500ms. Remaining try: {}'
-                                      .format(timeout - 1))
-                    timeout -= 1
-                    if timeout == 0:
-                        self.logger.error('Timeout Error: {}'.format(e))
-                        return 'timeout'
-                    sleep(0.5)
-                elif validation_error_name in e.args[0]:
-                    self.logger.error('Validation Error: {}'.format(e))
-                    return 'ValidationError'
-                elif rate_limit_error_name in e.args[0]:
-                    self.logger.error('RateLimitError occurred. Sleep 60 seconds.')
-                    sleep(60)
-                    return 'RateLimitError'
-                else:
-                    self.logger.error('Logging unexpected error message: {}'.format(e.args[0]))
-                    return 'UnexpectedError'
+                self.logger.error(f'Unexpected error: {err}')
+                return 'UnexpectedError'
 
 
 def setup_logger(name):
