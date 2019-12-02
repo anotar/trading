@@ -30,7 +30,7 @@ class BinanceOrder:
         self.usdt_minimum_order_size = 10 * 1.3
 
         self.error_result = ['InsufficientFunds', 'InvalidOrder', 'RateLimitExceeded',
-                             'RequestTimeout', 'BaseError', 'UnexpectedError']
+                             'NetworkError', 'BaseError', 'UnexpectedError']
 
         self.logger.info('Binance Order Module Setup Completed')
 
@@ -146,8 +146,7 @@ class BinanceOrder:
                     ticker_24hr_stat = data
                     break
 
-        if not ticker_24hr_stat:
-            raise ValueError(f'Received {symbol}. Ticker is invalid')
+        assert ticker_24hr_stat, f'Received {symbol}. Ticker is invalid'
 
         ticker_stat = dict()
         ticker_stat['last_price'] = float(ticker_24hr_stat['lastPrice'])
@@ -247,7 +246,7 @@ class BinanceOrder:
         else:
             return balance
 
-    def get_open_orders(self):
+    def get_open_orders_info(self):
         open_orders = self._try_until_timeout(self.binance.privateGetOpenOrders)
         if open_orders in self.error_result:
             return False
@@ -264,7 +263,7 @@ class BinanceOrder:
             return False
 
     def update_open_order_data(self):
-        open_order_data = self.get_open_orders()
+        open_order_data = self.get_open_orders_info()
         if open_order_data:
             self.open_order_data = open_order_data
             return True
@@ -274,7 +273,7 @@ class BinanceOrder:
     def get_open_order_info(self, order_id, data_update=True):
         order_id = int(order_id)
         if data_update:
-            open_orders = self.get_open_orders()
+            open_orders = self.get_open_orders_info()
             if not open_orders:
                 return False
         else:
@@ -309,7 +308,7 @@ class BinanceOrder:
             else:
                 return order_result
         else:
-            order_result =  self._try_until_timeout(self.binance.cancel_order, str(order_id), symbol)
+            order_result = self._try_until_timeout(self.binance.cancel_order, str(order_id), symbol)
             if order_result in self.error_result:
                 return False
             else:
@@ -323,6 +322,8 @@ class BinanceOrder:
         if not oco and not normal:
             raise ValueError('Either OCO or normal should be True')
         orders_info = self.get_open_orders_info()
+        if not orders_info:
+            return False
         result_list = []
         order_list_id_list = []
 
@@ -525,12 +526,12 @@ class BinanceOrder:
                 self.logger.error(f'RateLimitExceeded Error: {err}')
                 sleep(60)
                 return 'RateLimitExceeded'
-            except ccxt.RequestTimeout as err:
+            except ccxt.NetworkError as err:
                 timeout -= 1
-                self.logger.warning(f'RequestTimeout Error occurred. Try again after 500ms. Remaining try: {timeout}')
+                self.logger.warning(f'NetworkError Error occurred. Try again after 500ms. Remaining try: {timeout}')
                 if timeout == 0:
-                    self.logger.error(f'RequestTimeout Error: {err}')
-                    return 'RequestTimeout'
+                    self.logger.error(f'NetworkError Error: {err}')
+                    return 'NetworkError'
                 sleep(0.5)
             except ccxt.BaseError as err:
                 self.logger.error(f'BaseError error: {err}')
