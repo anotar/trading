@@ -24,8 +24,7 @@ class BinanceAltBtcDayTrade:
                                      'alt_trade': 0,
                                      }
 
-        self.btc_trade_data = {'prev_month': datetime.utcnow().month-1,
-                               'btc_status': 'init',  # 'buy' or 'sell'
+        self.btc_trade_data = {'btc_status': 'init',  # 'buy' or 'sell'
                                'base_symbol': 'BTC/USDT',
                                }
 
@@ -137,39 +136,30 @@ class BinanceAltBtcDayTrade:
         ohlcv = self.bo.get_ohlcv(symbol, '1M', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
-        month_now = datetime.utcnow().month
-        prev_month = self.btc_trade_data['prev_month']
 
         btc_status = self.btc_trade_data['btc_status']
         self.logger.info(f'Current btc status is \'{btc_status}\'')
         if last_price < pivot['s1']:
             self.logger.info(f'{symbol}: Last Price is under Pivot S1')
             if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: start sell procedure')
+                self.logger.info(f'{symbol}: start sell BTC procedure')
                 self.sell_all_btc()
                 self.btc_trade_data['btc_status'] = 'sell'
                 self.logger.info('Change btc status to \'sell\'')
 
         elif prev_close < pivot['p']:
-            self.logger.info(f'{symbol}: Previous daily close price is under Pivot P')
-            if prev_month is not month_now:
-                if self.btc_trade_data['btc_status'] != 'sell':
-                    self.logger.info(f'{symbol}: New month. Start sell procedure')
-                    self.sell_all_btc()
-                    self.btc_trade_data['prev_month'] = month_now
-                    self.logger.info('Update previous month status')
-                    self.btc_trade_data['btc_status'] = 'sell'
-                    self.logger.info('Change btc status to \'sell\'')
-            else:
-                self.logger.info('Not new month. Passing under Pivot P trigger')
-                if self.btc_trade_data['btc_status'] != 'buy':
-                    self.btc_trade_data['btc_status'] = 'buy'
-                    self.logger.info('Change btc status to \'buy\'')
+            self.logger.info(f'{symbol}: Previous monthly close price is under Pivot P')
+            if self.btc_trade_data['btc_status'] != 'sell':
+                self.logger.info(f'{symbol}: Start sell BTC procedure')
+                self.sell_all_btc()
+                self.logger.info('Update previous month status')
+                self.btc_trade_data['btc_status'] = 'sell'
+                self.logger.info('Change btc status to \'sell\'')
 
         else:
-            self.logger.info(f'{symbol}: Last Price is more than Pivot P')
+            self.logger.info(f'{symbol}: Previous monthly close price is more than Pivot P')
             if self.btc_trade_data['btc_status'] != 'buy':
-                self.logger.info(f'{symbol}: start buy procedure')
+                self.logger.info(f'{symbol}: start buy BTC procedure')
                 self.buy_all_btc()
                 self.btc_trade_data['btc_status'] = 'buy'
                 self.logger.info('Change btc status to \'buy\'')
