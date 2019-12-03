@@ -1,7 +1,6 @@
 .idea/
 log/
 __pycache__/
-api/
 log/
 venv/
 erm.py
