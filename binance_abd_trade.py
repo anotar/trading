@@ -582,8 +582,8 @@ class BinanceAltBtcDayTrade:
         self.logger.info('Sell invalid alts')
         btc_base_symbol = self.btc_trade_data['base_symbol']
 
-        if len(self.alt_trade_data['trading_alts']):
-            self.logger.info('No trading alts')
+        if not len(self.alt_trade_data['trading_alts']):
+            self.logger.info('No trading alts. Exit sell invalid alts sequence')
             return
 
         trading_alts = list(self.alt_trade_data['trading_alts'].keys())
