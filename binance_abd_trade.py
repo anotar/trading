@@ -22,6 +22,7 @@ class BinanceAltBtcDayTrade:
         self.trade_thread = threading.Thread()
         self.trade_loop_prev_time = {'btc_trade': 0,
                                      'alt_trade': 0,
+                                     'record': 0,
                                      }
 
         self.btc_trade_data = {'btc_status': 'init',  # 'buy' or 'sell'
@@ -116,6 +117,9 @@ class BinanceAltBtcDayTrade:
 
         if self.check_seconds('alt_trade', 1, time_type='hour'):
             self.alt_trade()
+
+        if self.check_seconds('record', 1, time_type='day'):
+            self.record_information()
 
     def btc_trade(self):
         self.logger.info('Starting BTC Trade...')
@@ -253,17 +257,22 @@ class BinanceAltBtcDayTrade:
                 self.logger.info(f'{open_alt}: Move to trading alts')
             else:
                 if open_order['timestamp'] < (self.bo.binance.seconds() - self.hourly_timestamp):
-                    self.logger.info(f'{open_alt}: Cancel open order')
-                    assert self.bo.cancel_order(open_alt, order_id)
                     filled_ratio = open_order['executed_quantity'] / open_order['original_quantity']
                     if filled_ratio >= executed_quantity_ratio:
                         self.logger.info(f'{open_alt}: Open order has been {filled_ratio*100}% filled. '
                                          f'Move to trading alts')
+                        assert self.bo.cancel_order(open_alt, order_id)
+                        self.logger.info(f'{open_alt}: Canceled open order')
                         self.alt_trade_data['trading_alts'][open_alt] = deepcopy(
                             self.alt_trade_data['trading_alts_stat'])
                         del self.alt_trade_data['open_alts'][open_alt]
-                    else:
-                        self.logger.info(f'{open_alt}: Open order is created 1 hour before. Delete from open alts')
+                        trading_alts_list = list(self.alt_trade_data['trading_alts'].keys())
+                        self.logger.info(f'Trading alts is updated to {trading_alts_list}')
+                    elif self.bo.check_order_quantity(open_alt, open_order['executed_quantity']):
+                        self.logger.info(f'{open_alt}: Partially filled open order is created more than 1 hour before.'
+                                         f' Delete from open alts')
+                        assert self.bo.cancel_order(open_alt, order_id)
+                        self.logger.info(f'{open_alt}: Canceled open order')
                         assert self.bo.sell_at_market(open_alt) not in self.bo.error_list
                         del self.alt_trade_data['open_alts'][open_alt]
         new_open_alts = list(self.alt_trade_data['open_alts'].keys())
@@ -486,12 +495,14 @@ class BinanceAltBtcDayTrade:
 
             if last_price <= stop_price:
                 self.logger.info(f'{trading_alt}: Last price is under Pivot s1')
+                self.cancel_trading_alt_orders(trading_alt)
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
                 continue
             elif prev_close < pivot_price and new_day:
                 self.logger.info(f'{trading_alt}: Previous daily close price is under pivot P')
+                self.cancel_trading_alt_orders(trading_alt)
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
@@ -499,6 +510,7 @@ class BinanceAltBtcDayTrade:
 
             if trading_alt_stat['s1_quantity']:
                 self.logger.info(f'{trading_alt}: Stop order has been triggered')
+                self.cancel_trading_alt_orders(trading_alt)
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
@@ -610,6 +622,35 @@ class BinanceAltBtcDayTrade:
                     assert self.bo.sell_at_market(btc_base_symbol) not in self.bo.error_list
 
         self.logger.info('Sold all invalid alts')
+
+    def record_information(self, verbose=True):
+        raise NotImplementedError
+        # TODO: add load balance sequence
+        btc_balance = 0
+        usdt_balance = 0
+
+        # save balance data
+        file_name = 'bot_data_history'
+        record_dir = 'data/'
+        if not os.path.exists(record_dir):
+            os.makedirs(record_dir)
+        balance_data = pd.DataFrame()
+        if os.path.isfile(record_dir+file_name+'.csv'):
+            balance_data = pd.read_csv('{}.csv'.format(record_dir+file_name))
+        balance_dict = {
+            'timestamp': self.bo.binance.seconds(),
+            'time': self.bo.binance.iso8601(self.bo.binance.milliseconds()),
+            'btc_balance': btc_balance,
+            'usdt_balance': usdt_balance,
+        }
+        balance_data = balance_data.append(balance_dict, ignore_index=True)
+        balance_data.to_csv("{}.csv".format(record_dir + file_name), mode='w', encoding='utf-8', index=False)
+        self.logger.info('Record trading data'.format(btc_balance))
+
+        if verbose:
+            # Show trading data
+            self.logger.info(f'BTC Balance: {btc_balance},'
+                             f'USDT Balance: {usdt_balance}')
 
 
 def setup_logger(name):

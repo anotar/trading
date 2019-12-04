@@ -305,7 +305,7 @@ class BinanceOrder:
                 return order_result
         elif internal_symbol:
             param = {'symbol': symbol, 'orderId': order_id}
-            order_result = self._try_until_timeout(self.binance.privateDeleteOrderList, param)
+            order_result = self._try_until_timeout(self.binance.privateDeleteOrder, param)
             if order_result in self.error_list:
                 return False
             else:
