@@ -624,10 +624,44 @@ class BinanceAltBtcDayTrade:
         self.logger.info('Sold all invalid alts')
 
     def record_information(self, verbose=True):
-        raise NotImplementedError
-        # TODO: add load balance sequence
-        btc_balance = 0
+        self.logger.info('Record Binance trading bot information')
+        assert self.bo.update_ticker_data()
+        ticker_info = self.bo.get_ticker_statistics('BTC/USDT', data_update=False)
+        assert ticker_info
+        btc_price = ticker_info['last_price']
         usdt_balance = 0
+
+        balance = self.bo.get_balance('BTC')
+        assert balance not in self.bo.error_list
+        usdt_balance += balance * btc_price
+        balance = self.bo.get_balance('USDT')
+        assert balance not in self.bo.error_list
+        usdt_balance += balance
+
+        for trading_alt in self.alt_trade_data['trading_alts']:
+            ticker, pair = trading_alt.split('/')
+            balance = self.bo.get_balance(ticker)
+            assert balance not in self.bo.error_list
+            ticker_info = self.bo.get_ticker_statistics(trading_alt, data_update=False)
+            assert ticker_info
+            last_price = ticker_info['last_price']
+            value = balance * last_price
+            if pair == 'BTC':
+                value *= btc_price
+            usdt_balance += value
+
+        for open_alt in self.alt_trade_data['open_alts']:
+            ticker, pair = open_alt.split('/')
+            balance = self.bo.get_balance(ticker)
+            assert balance not in self.bo.error_list
+            ticker_info = self.bo.get_ticker_statistics(open_alt, data_update=False)
+            assert ticker_info
+            last_price = ticker_info['last_price']
+            value = balance * last_price
+            if pair == 'BTC':
+                value *= btc_price
+            usdt_balance += value
+        btc_balance = round(usdt_balance / btc_price, 3)
 
         # save balance data
         file_name = 'bot_data_history'
@@ -647,10 +681,10 @@ class BinanceAltBtcDayTrade:
         balance_data.to_csv("{}.csv".format(record_dir + file_name), mode='w', encoding='utf-8', index=False)
         self.logger.info('Record trading data'.format(btc_balance))
 
+        # Show trading data
         if verbose:
-            # Show trading data
-            self.logger.info(f'BTC Balance: {btc_balance},'
-                             f'USDT Balance: {usdt_balance}')
+            self.logger.info(f'Estimated Balance in BTC: {btc_balance}')
+            self.logger.info(f'Estimated Balance in USDT: {usdt_balance}')
 
 
 def setup_logger(name):
