@@ -1,4 +1,0 @@
-binance_order: 바이낸스 api 거래 모듈
-binance_abd_trade: 트레이드 모듈
-binance_abd_telegram_bot: telegram bot 모듈
-binance_abd_main: 트레이딩 봇 실행
