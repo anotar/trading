@@ -1,8 +1,8 @@
-지표: 피봇(HLC/3)
 -타입: 피보나치
--Pivots Timeframe: Monthly(전달 월봉 기준)
+-Pivots Timeframe: Week
 기본전략: P위면 롱, 아래면 숏.
 종목 : BTC/USDT 무기한 선물
+거래 기준 봉: 4시간 봉
 
 <진입>
 이전 봉 종가 기준으로 하루마다 P 90%에서 진입 시도(maker 주문)
