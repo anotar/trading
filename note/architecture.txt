@@ -1,4 +1,6 @@
+trading_telegram_bot: telegram bot 모듈
 binance_order: 바이낸스 api 거래 모듈
-binance_adt_trade: 트레이드 모듈
-binance_adt_telegram_bot: telegram bot 모듈
-binance_adt_main: 트레이딩 봇 실행
+binance_adt_trade: Binance ALT Daily Trading 모듈
+binance_adt_main: adt trading 관리
+binance_bmt_trade: Binance BTC Monthly Trading 모듈
+binance_bmt_main: bmt trading 관리
