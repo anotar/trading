@@ -10,11 +10,11 @@ from binance_order import BinanceOrder
 from copy import deepcopy
 
 
-class BinanceAltBtcDayTrade:
+class BinanceAltDailyTrade:
     def __init__(self, api_key, api_secret):
         # basic setup
-        self.logger = setup_logger('binance_abd_trade')
-        self.logger.info("Setting Binance Alt/BTC Pair Trading Module...")
+        self.logger = setup_logger('binance_adt_trade')
+        self.logger.info("Setting Binance Alt Daily Trading Module...")
         self.bo = BinanceOrder(api_key, api_secret)
 
         self.trade_loop_interval = 1  # seconds
@@ -32,7 +32,7 @@ class BinanceAltBtcDayTrade:
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
                                'base_pair': 'init',  # 'BTC' or 'USDT'
                                'max_trade_limit': 5,
-                               'trading_alts': {}, # {ticker: trading_alts_stat,}
+                               'trading_alts': {},  # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
                                                      's1_quantity': 0,
                                                      'r3_filled': False,
@@ -66,10 +66,10 @@ class BinanceAltBtcDayTrade:
         self.hourly_timestamp = 60 * 60
         self.daily_timestamp = 60 * 60 * 24
 
-        self.logger.info('Binance Alt/BTC Pair Trading Module Setup Completed')
+        self.logger.info('Binance Alt Daily Trading Module Setup Completed')
 
     def start_trade(self):
-        self.logger.info('Setting up ABD Trade Loop...')
+        self.logger.info('Setting up ADT Trade Loop...')
         self.trade_loop_checker = True
 
         def trade_loop():
@@ -78,13 +78,13 @@ class BinanceAltBtcDayTrade:
                 try:
                     self.trade()
                 except Exception:
-                    self.logger.exception('Caught Error in ABD Trade Loop')
+                    self.logger.exception('Caught Error in ADT Trade Loop')
                 sleep(self.trade_loop_interval)
 
         self.trade_thread = threading.Thread(target=trade_loop)
         self.trade_thread.daemon = True
         self.trade_thread.start()
-        self.logger.info('Setup Completed. Start ABD Trade Loop')
+        self.logger.info('Setup Completed. Start ADT Trade Loop')
 
     def stop_trade(self):
         self.trade_loop_checker = False
@@ -95,7 +95,7 @@ class BinanceAltBtcDayTrade:
             max_try -= 1
         while self.trade_thread.is_alive():
             sleep(0.1)
-        self.logger.info('Successfully Stopped ABD Trade Loop')
+        self.logger.info('Successfully Stopped ADT Trade Loop')
 
     def check_seconds(self, dict_key, time, time_type='second', time_sync_offset=1):
         if time_type == 'minute':
@@ -665,7 +665,7 @@ class BinanceAltBtcDayTrade:
 
         # save balance data
         file_name = 'bot_data_history'
-        record_dir = 'data/'
+        record_dir = 'data/Binance/AltDailyTrading/'
         if not os.path.exists(record_dir):
             os.makedirs(record_dir)
         balance_data = pd.DataFrame()
@@ -703,12 +703,12 @@ if __name__ == '__main__':
     with open('api/binance_ysjjah_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-    binanceABDT = BinanceAltBtcDayTrade(api_test['api_key'], api_test['api_secret'])
+    binanceADT = BinanceAltDailyTrade(api_test['api_key'], api_test['api_secret'])
 
     print('start trade')
-    binanceABDT.start_trade()
+    binanceADT.start_trade()
     while True:
         sleep(100)
     print('stop trade')
-    binanceABDT.stop_trade()
+    binanceADT.stop_trade()
 

@@ -1,4 +1,4 @@
-from binance_abd_trade import BinanceAltBtcDayTrade
+from binance_bmt_trade import BinanceBtcMonthlyTrade
 from time import sleep
 import logging
 import os
@@ -27,16 +27,16 @@ def setup_logger(name):
     return logger
 
 
-logger = setup_logger('binance_alt_btc_day_main')
-logger.info('Set up Binance Alt Btc Day Trading...')
+logger = setup_logger('binance_bmt_main')
+logger.info('Set up Binance BTC Monthly Trading...')
 
-with open('api/binance_kjss970_naver.txt', 'r') as f:
+with open('api/binance_ysjjdh_gmail.txt', 'r') as f:
     api_keys = f.readlines()
 api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-binanceABDT = BinanceAltBtcDayTrade(api_test['api_key'], api_test['api_secret'])
+binanceBMT = BinanceBtcMonthlyTrade(api_test['api_key'], api_test['api_secret'])
 
-logger.info('Start Binance Alt Btc Day Trading')
-binanceABDT.start_trade()
+logger.info('Start Binance BTC Monthly Trading')
+binanceBMT.start_trade()
 while True:
     sleep(10)
 
