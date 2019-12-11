@@ -519,13 +519,17 @@ class BinanceOrder:
         timeout = 5
         while timeout:
             try:
-                func_result = func(*args, **kwargs)
+                func_result = func(args, kwargs)
                 return func_result
             except ccxt.InsufficientFunds as err:
                 self.logger.error(f'InsufficientFunds Error: {err}')
+                if args or kwargs:
+                    self.logger.error(f'Function Param: {args}, {kwargs}')
                 return 'InsufficientFunds'
             except ccxt.InvalidOrder as err:
                 self.logger.error(f'InvalidOrder Error: {err}')
+                if args or kwargs:
+                    self.logger.error(f'Function Param: {args}, {kwargs}')
                 return 'InvalidOrder'
             except ccxt.RateLimitExceeded as err:
                 self.logger.error(f'RateLimitExceeded Error: {err}')
@@ -540,9 +544,13 @@ class BinanceOrder:
                 sleep(0.5)
             except ccxt.BaseError as err:
                 self.logger.error(f'BaseError error: {err}')
+                if args or kwargs:
+                    self.logger.error(f'Function Param: {args}, {kwargs}')
                 return 'BaseError'
             except Exception as err:
                 self.logger.error(f'Unexpected error: {err}')
+                if args or kwargs:
+                    self.logger.error(f'Function Param: {args}, {kwargs}')
                 return 'UnexpectedError'
 
 
