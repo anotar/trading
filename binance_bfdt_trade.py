@@ -24,8 +24,9 @@ class BinanceBtcFutureDailyTrade:
                                      'record': 0,
                                      }
 
-        self.btc_trade_data = {'btc_status': 'init',  # 'buy' or 'sell'
+        self.btc_trade_data = {'btc_status': 'init',  # 'long' or 'short'
                                'base_symbol': 'BTC/USDT',
+                               'internal_symbol': 'BTCUSDT',
                                }
 
         self.minute_timestamp = 60
@@ -90,7 +91,8 @@ class BinanceBtcFutureDailyTrade:
             self.logger.info('Exchange is Not Active. Exit BTC trade')
 
         symbol = self.btc_trade_data['base_symbol']
-        pivot = self.bo.get_yearly_pivot(symbol)
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        pivot = self.bo.get_monthly_pivot(symbol)
         assert pivot
         self.logger.info(f'{symbol} Pivot: {pivot}')
         btc_info = self.bo.get_ticker_info(symbol)
