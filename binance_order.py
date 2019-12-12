@@ -554,6 +554,15 @@ class BinanceOrder:
                 return 'UnexpectedError'
 
 
+class BinanceFutureOrder(BinanceOrder):
+    def __init__(self, api_key, api_secret):
+        self.logger = setup_logger('binance_future_order')
+        self.logger.info('Setting Binance Future Order Module...')
+        super().__init__(api_key, api_secret)
+        self.logger = setup_logger('binance_future_order')
+        self.logger.info('Binance Future Order Module Setup Completed')
+        
+
 def setup_logger(name):
     log_dir = f'./log/{name}/'
     if not os.path.exists(log_dir):
