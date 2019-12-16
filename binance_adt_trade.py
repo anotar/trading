@@ -389,14 +389,16 @@ class BinanceAltDailyTrade:
         if r3_order['order_list_id']:
             stop_order_id = r3_order['stop_order_id']
             stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            is_stop_order_canceled = False
             if stop_order_info:
                 self.logger.info(f'{trading_alt}: Cancel r3 stop order')
                 assert self.bo.cancel_order(trading_alt, stop_order_id)
+                is_stop_order_canceled = True
 
             limit_order_id = r3_order['limit_order_id']
-            limit_order_info = self.bo.get_open_order_info(limit_order_id)
+            limit_order_info = self.bo.get_open_order_info(limit_order_id, data_update=False)
             assert limit_order_info not in self.bo.error_list
-            if limit_order_info:
+            if limit_order_info and not is_stop_order_canceled:
                 self.logger.info(f'{trading_alt}: Cancel r3 limit order')
                 assert self.bo.cancel_order(trading_alt, limit_order_id)
             else:
@@ -406,14 +408,16 @@ class BinanceAltDailyTrade:
         if r2_order['order_list_id']:
             stop_order_id = r2_order['stop_order_id']
             stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            is_stop_order_canceled = False
             if stop_order_info:
                 self.logger.info(f'{trading_alt}: Cancel r2 stop order')
                 assert self.bo.cancel_order(trading_alt, stop_order_id)
+                is_stop_order_canceled = True
 
             limit_order_id = r2_order['limit_order_id']
-            limit_order_info = self.bo.get_open_order_info(r2_order['limit_order_id'])
+            limit_order_info = self.bo.get_open_order_info(r2_order['limit_order_id'], data_update=False)
             assert limit_order_info not in self.bo.error_list
-            if limit_order_info:
+            if limit_order_info and not is_stop_order_canceled:
                 self.logger.info(f'{trading_alt}: Cancel r2 limit order')
                 assert self.bo.cancel_order(trading_alt, limit_order_id)
             else:
