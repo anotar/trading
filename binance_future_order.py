@@ -11,6 +11,13 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger = setup_logger('binance_future_order')
         self.logger.info('Binance Future Order Module Setup Completed')
 
+    # liquidation calculator
+    # future ohlcv
+    # future pivot
+    # future balance
+    # future ticker info
+    # create margin order function
+
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'

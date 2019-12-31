@@ -15,7 +15,7 @@ class BinanceBtcFutureDailyTrade:
         # basic setup
         self.logger = setup_logger('binance_bfdt_trade')
         self.logger.info("Setting Binance BTC Future Daily Trading Module...")
-        self.bo = BinanceFutureOrder(api_key, api_secret)
+        self.bfo = BinanceFutureOrder(api_key, api_secret)
 
         self.trade_loop_interval = 1  # seconds
         self.trade_loop_checker = True
@@ -57,7 +57,7 @@ class BinanceBtcFutureDailyTrade:
         self.trade_loop_checker = False
         max_try = 5
         while max_try:
-            if self.bo.cancel_all_order():
+            if self.bfo.cancel_all_order():
                 break
             max_try -= 1
         while self.trade_thread.is_alive():
@@ -71,7 +71,7 @@ class BinanceBtcFutureDailyTrade:
             time *= self.hourly_timestamp
         elif time_type == 'day':
             time *= self.daily_timestamp
-        quotient_seconds = (self.bo.binance.seconds() - time_sync_offset) // time
+        quotient_seconds = (self.bfo.binance.seconds() - time_sync_offset) // time
         if quotient_seconds != self.trade_loop_prev_time[dict_key]:
             self.trade_loop_prev_time[dict_key] = quotient_seconds
             return True
@@ -79,86 +79,53 @@ class BinanceBtcFutureDailyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 1, time_type='day'):
+        if self.check_seconds('btc_trade', 1, time_type='hour'):
             self.btc_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
 
     def btc_trade(self):
-        self.logger.info('Starting BTC Trade...')
-        if not self.bo.check_exchange_status():
+        self.logger.info('Starting BTC Future Trade...')
+        if not self.bfo.check_exchange_status():
             self.logger.info('Exchange is Not Active. Exit BTC trade')
 
+        # TODO: Change algorithm compatible to Future order
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bo.get_monthly_pivot(symbol)
+        pivot = self.bfo.get_monthly_pivot(symbol)
         assert pivot
         self.logger.info(f'{symbol} Pivot: {pivot}')
-        btc_info = self.bo.get_ticker_info(symbol)
+        btc_info = self.bfo.get_ticker_info(symbol)
         assert btc_info
         last_price = btc_info['last_price']
         hourly_interval = 3600
-        if self.bo.binance.seconds() - hourly_interval > btc_info['timestamp']:
+        if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bo.get_ohlcv(symbol, '1M', limit=5)
+        ohlcv = self.bfo.get_ohlcv(symbol, '1M', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
-        btc_status = self.btc_trade_data['btc_status']
-        self.logger.info(f'Current btc status is \'{btc_status}\'')
-        if last_price < pivot['s1']:
-            self.logger.info(f'{symbol}: Last Price is under Pivot S1')
-            if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: start sell BTC procedure')
-                self.sell_all_btc()
-                self.btc_trade_data['btc_status'] = 'sell'
-                self.logger.info('Change btc status to \'sell\'')
-
-        elif prev_close < pivot['p']:
-            self.logger.info(f'{symbol}: Previous monthly close price is under Pivot P')
-            if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: Start sell BTC procedure')
-                self.sell_all_btc()
-                self.logger.info('Update previous month status')
-                self.btc_trade_data['btc_status'] = 'sell'
-                self.logger.info('Change btc status to \'sell\'')
-
-        else:
-            self.logger.info(f'{symbol}: Previous monthly close price is more than Pivot P')
-            if self.btc_trade_data['btc_status'] != 'buy':
-                self.logger.info(f'{symbol}: start buy BTC procedure')
-                self.buy_all_btc()
-                self.btc_trade_data['btc_status'] = 'buy'
-                self.logger.info('Change btc status to \'buy\'')
-
         self.logger.info('Exit BTC Trade')
 
-    def sell_all_btc(self):
-        self.logger.info('Sell All BTC')
-        symbol = self.btc_trade_data['base_symbol']
-        assert self.bo.sell_at_market(symbol) not in self.bo.error_list
-
-    def buy_all_btc(self, slip_rate=0.995):
-        self.logger.info('Buy All BTC')
-        symbol = self.btc_trade_data['base_symbol']
-        assert self.bo.buy_at_market(symbol) not in self.bo.error_list
+    def switch_position(self):
+        pass
 
     def record_information(self, verbose=True):
         self.logger.info('Record Binance trading bot information')
-        assert self.bo.update_ticker_data()
-        ticker_info = self.bo.get_ticker_statistics('BTC/USDT', data_update=False)
+        assert self.bfo.update_ticker_data()
+        ticker_info = self.bfo.get_ticker_statistics('BTC/USDT', data_update=False)
         assert ticker_info
         btc_price = ticker_info['last_price']
         usdt_balance = 0
 
         # TODO: get balance including future balance
-        balance = self.bo.get_balance('BTC')
-        assert balance not in self.bo.error_list
+        balance = self.bfo.get_balance('BTC')
+        assert balance not in self.bfo.error_list
         usdt_balance += balance * btc_price
-        balance = self.bo.get_balance('USDT')
-        assert balance not in self.bo.error_list
+        balance = self.bfo.get_balance('USDT')
+        assert balance not in self.bfo.error_list
         usdt_balance += balance
         btc_balance = round(usdt_balance / btc_price, 3)
 
@@ -171,8 +138,8 @@ class BinanceBtcFutureDailyTrade:
         if os.path.isfile(record_dir+file_name+'.csv'):
             balance_data = pd.read_csv('{}.csv'.format(record_dir+file_name))
         balance_dict = {
-            'timestamp': self.bo.binance.seconds(),
-            'time': self.bo.binance.iso8601(self.bo.binance.milliseconds()),
+            'timestamp': self.bfo.binance.seconds(),
+            'time': self.bfo.binance.iso8601(self.bfo.binance.milliseconds()),
             'btc_balance': btc_balance,
             'usdt_balance': usdt_balance,
         }
