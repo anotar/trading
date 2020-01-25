@@ -456,7 +456,7 @@ class BinanceOrder:
             if quantity in self.error_list:
                 return quantity
         if not self.check_order_quantity(symbol, quantity):
-            self.logger.info(f'{pair} quantity({quantity}) is under minimum order size. Cancel order')
+            self.logger.info(f'{ticker} quantity({quantity}) is under minimum order size. Cancel order')
             return False
 
         self.logger.info(f'{ticker} Quantity: {quantity}')

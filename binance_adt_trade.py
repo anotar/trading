@@ -31,7 +31,7 @@ class BinanceAltDailyTrade:
 
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
                                'base_pair': 'init',  # 'BTC' or 'USDT'
-                               'max_trade_limit': 5,
+                               'max_trade_limit': 3,
                                'trading_alts': {},  # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
                                                      's1_quantity': 0,
