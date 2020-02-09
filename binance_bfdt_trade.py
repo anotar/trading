@@ -24,9 +24,10 @@ class BinanceBtcFutureDailyTrade:
                                      'record': 0,
                                      }
 
-        self.btc_trade_data = {'btc_status': 'init',  # 'long' or 'short'
+        self.btc_trade_data = {'btc_status': 'init',  # 'long' or 'short' or 'liq'
                                'base_symbol': 'BTC/USDT',
                                'internal_symbol': 'BTCUSDT',
+                               'liquidation_timestamp': 0,
                                }
 
         self.minute_timestamp = 60
@@ -80,37 +81,69 @@ class BinanceBtcFutureDailyTrade:
 
     def trade(self):
         if self.check_seconds('btc_trade', 1, time_type='hour'):
-            self.btc_trade()
+            self.future_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
 
-    def btc_trade(self):
+    def future_trade(self):
         self.logger.info('Starting BTC Future Trade...')
         if not self.bfo.check_exchange_status():
             self.logger.info('Exchange is Not Active. Exit BTC trade')
 
-        # TODO: Change algorithm compatible to Future order
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bfo.get_monthly_pivot(symbol)
+        pivot = self.bfo.get_future_monthly_pivot(internal_symbol)
         assert pivot
-        self.logger.info(f'{symbol} Pivot: {pivot}')
-        btc_info = self.bfo.get_ticker_info(symbol)
+        self.logger.info(f'{symbol} Future Pivot: {pivot}')
+        btc_info = self.bfo.get_future_ticker_info(internal_symbol)
         assert btc_info
         last_price = btc_info['last_price']
         hourly_interval = 3600
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_ohlcv(symbol, '1M', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1d', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
-        self.logger.info('Exit BTC Trade')
+        assert self.check_liquidation()
+        liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
+        if liquidation_timestamp:
+            quotient_day = self.bfo.binance.seconds() // self.daily_timestamp
+            liquidation_day = liquidation_timestamp // self.daily_timestamp
+            if quotient_day != liquidation_day:
+                self.btc_trade_data['btc_status'] = 'init'
 
-    def switch_position(self):
-        pass
+        btc_status = self.btc_trade_data['btc_status']
+        if btc_status == 'init':
+            if last_price >= pivot['p']:
+                assert self.switch_position('long')
+                self.btc_trade_data['btc_status'] = 'long'
+            else:
+                assert self.switch_position('short')
+                self.btc_trade_data['btc_status'] = 'short'
+        elif btc_status == 'long':
+            if prev_close < pivot['p']:
+                assert self.switch_position('short')
+                self.btc_trade_data['btc_status'] = 'short'
+        elif btc_status == 'short':
+            if prev_close > pivot['p']:
+                assert self.switch_position('long')
+                self.btc_trade_data['btc_status'] = 'long'
+
+        self.logger.info('Exit Future Trade')
+
+    def switch_position(self, position):
+        # calculate leverage
+        # make market order
+        # make stop order
+        # make limit order
+        return True
+
+    def check_liquidation(self):
+        # check if stop order completed
+        return True
 
     def record_information(self, verbose=True):
         self.logger.info('Record Binance trading bot information')
@@ -120,12 +153,14 @@ class BinanceBtcFutureDailyTrade:
         btc_price = ticker_info['last_price']
         usdt_balance = 0
 
-        # TODO: get balance including future balance
         balance = self.bfo.get_balance('BTC')
         assert balance not in self.bfo.error_list
         usdt_balance += balance * btc_price
         balance = self.bfo.get_balance('USDT')
         assert balance not in self.bfo.error_list
+        usdt_balance += balance
+        balance = self.bfo.get_future_balance()
+        assert balance
         usdt_balance += balance
         btc_balance = round(usdt_balance / btc_price, 3)
 

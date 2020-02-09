@@ -1,1 +1,0 @@
-assert not True or (True == 'InsufficientFunds')
