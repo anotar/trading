@@ -14,6 +14,12 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger = setup_logger('binance_future_order')
         self.logger.info('Binance Future Order Module Setup Completed')
 
+        self.side_type = ['long', 'short']
+        self.contract_spec = [(50000, 0.004, 0),  # (Position Bracket, Maintenance Margin Rate, Maintenance Amount)
+                              (250000, 0.005, 50),
+                              (1000000, 0.01, 1300),
+                              (5000000, 0.025, 16300)]
+
     def get_future_ohlcv(self, internal_symbol, interval, limit=False):
         if limit:
             param = {'symbol': internal_symbol, 'interval': interval}
@@ -75,10 +81,30 @@ class BinanceFutureOrder(BinanceOrder):
         usdt_balance = float(balance_info[0]['balance'])
         return usdt_balance
 
-    def liquidation_calculator(self, p, sr2):
-        leverage = 0
-        raise NotImplementedError
-        return leverage
+    def liquidation_price_calculator(self, entry_price, quantity, balance, side):
+        direction = 0
+        if side not in self.side_type:
+            return False
+        elif side == 'short':
+            direction = -1
+        elif side == 'long':
+            direction = 1
+        usdt_quantity = entry_price * quantity
+        maintenance_margin_rate = 0
+        maintenance_amount = 0
+        for level in self.contract_spec:
+            position_bracket = level[0]
+            if position_bracket >= usdt_quantity:
+                maintenance_margin_rate = level[1]
+                maintenance_amount = level[2]
+                break
+            else:
+                continue
+        if not maintenance_margin_rate:
+            raise ValueError(f'Quantity {quantity} at price {entry_price} over trading bot spec')
+        liquidation_price = (balance + maintenance_amount - (direction * quantity * entry_price)) /\
+                            (quantity * (maintenance_margin_rate - direction))
+        return liquidation_price
 
     # create margin order function
 
@@ -107,4 +133,5 @@ if __name__ == '__main__':
     # pprint(bfo.get_future_monthly_pivot(internal_symmbol))
     # print(bfo.get_last_price(internal_symmbol))
     # pprint(bfo.get_future_ticker_info(internal_symmbol))
-    pprint(bfo.get_future_balance())
+    # pprint(bfo.get_future_balance())
+    print(round(bfo.liquidation_price_calculator(10336.83, 100, 100000, 'long'), 2))
