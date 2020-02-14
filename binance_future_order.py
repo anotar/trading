@@ -104,7 +104,39 @@ class BinanceFutureOrder(BinanceOrder):
             raise ValueError(f'Quantity {quantity} at price {entry_price} over trading bot spec')
         liquidation_price = (balance + maintenance_amount - (direction * quantity * entry_price)) /\
                             (quantity * (maintenance_margin_rate - direction))
-        return liquidation_price
+        return round(liquidation_price, 2)
+
+    def sr2_liquidation_calculator(self, entry_price, sr2, balance, side):
+        self.logger.info(f'SR2 liquidation price calculation starts. {side} at {entry_price} to {sr2} with {balance}')
+        leverage = 0
+        prev_lev_liq_price = 0
+        if side not in self.side_type:
+            return False
+        elif side == 'short':
+            is_over_sr2 = False
+            while not is_over_sr2 or leverage > 125:
+                leverage += 1
+                quantity = round(leverage * balance / entry_price, 3)
+                liquidation_price = self.liquidation_price_calculator(entry_price, quantity, balance, 'short')
+                if liquidation_price < sr2:
+                    leverage -= 1
+                    is_over_sr2 = True
+                else:
+                    prev_lev_liq_price = liquidation_price
+        elif side == 'long':
+            is_under_sr2 = False
+            while not is_under_sr2:
+                leverage += 1
+                quantity = round(leverage * balance / entry_price, 3)
+                liquidation_price = self.liquidation_price_calculator(entry_price, quantity, balance, 'long')
+                if liquidation_price > sr2 or leverage > 125:
+                    leverage -= 1
+                    is_under_sr2 = True
+                else:
+                    prev_lev_liq_price = liquidation_price
+        quantity = round(leverage * balance / entry_price, 3)
+        self.logger.info(f'Calculated leverage is {leverage}. Estimated liquidation price is {prev_lev_liq_price}')
+        return leverage, quantity
 
     # create margin order function
 
@@ -134,4 +166,5 @@ if __name__ == '__main__':
     # print(bfo.get_last_price(internal_symmbol))
     # pprint(bfo.get_future_ticker_info(internal_symmbol))
     # pprint(bfo.get_future_balance())
-    print(round(bfo.liquidation_price_calculator(10336.83, 100, 100000, 'long'), 2))
+    # print(bfo.liquidation_price_calculator(10800, 100, 100000, 'short'))
+    print(bfo.sr2_liquidation_calculator(9813, 9130, 100, 'long'))

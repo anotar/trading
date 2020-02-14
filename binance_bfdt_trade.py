@@ -28,6 +28,8 @@ class BinanceBtcFutureDailyTrade:
                                'base_symbol': 'BTC/USDT',
                                'internal_symbol': 'BTCUSDT',
                                'liquidation_timestamp': 0,
+                               'leverage': 0,
+                               'position_quantity': 0,
                                }
 
         self.minute_timestamp = 60
@@ -118,27 +120,37 @@ class BinanceBtcFutureDailyTrade:
         btc_status = self.btc_trade_data['btc_status']
         if btc_status == 'init':
             if last_price >= pivot['p']:
-                assert self.switch_position('long')
+                assert self.switch_position('long', pivot['s2'])
                 self.btc_trade_data['btc_status'] = 'long'
             else:
-                assert self.switch_position('short')
+                assert self.switch_position('short', pivot['r2'])
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'long':
             if prev_close < pivot['p']:
-                assert self.switch_position('short')
+                assert self.switch_position('short', pivot['r2'])
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                assert self.switch_position('long')
+                assert self.switch_position('long', pivot['s2'])
                 self.btc_trade_data['btc_status'] = 'long'
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, position):
-        # calculate leverage
+    def switch_position(self, side, sr2, position_by_balance=0.7):
+        # cancel all order
+        # close all position
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        last_price = self.bfo.get_last_price(internal_symbol)
+        assert last_price
+        balance = self.bfo.get_future_balance()
+        assert balance
+        balance *= position_by_balance
+        leverage, quantity = self.bfo.sr2_liquidation_calculator(last_price, sr2, balance, side)
+        self.btc_trade_data['leverage'] = leverage
+        # set leverage with isolated
         # make market order
-        # make stop order
-        # make limit order
+        # make stop order with reduce only
+        # make limit order with reduce only
         return True
 
     def check_liquidation(self):
