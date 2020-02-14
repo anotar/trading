@@ -107,7 +107,7 @@ class BinanceFutureOrder(BinanceOrder):
         return round(liquidation_price, 2)
 
     def sr2_liquidation_calculator(self, entry_price, sr2, balance, side):
-        self.logger.info(f'SR2 liquidation price calculation starts. {side} at {entry_price} to {sr2} with {balance}')
+        self.logger.info(f'SR2 liquidation price calculation starts. {side} at {entry_price} SR2 {sr2} with {balance}')
         leverage = 0
         prev_lev_liq_price = 0
         if side not in self.side_type:
