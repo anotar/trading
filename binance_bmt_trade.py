@@ -175,7 +175,7 @@ class BinanceBtcMonthlyTrade:
         }
         balance_data = balance_data.append(balance_dict, ignore_index=True)
         balance_data.to_csv("{}.csv".format(record_dir + file_name), mode='w', encoding='utf-8', index=False)
-        self.logger.info('Record trading data'.format(btc_balance))
+        self.logger.info('Trading data recorded')
 
         # Show trading data
         if verbose:

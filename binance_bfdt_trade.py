@@ -137,17 +137,19 @@ class BinanceBtcFutureDailyTrade:
         self.logger.info('Exit Future Trade')
 
     def switch_position(self, side, sr2, position_by_balance=0.7):
-        # cancel all order
-        # close all position
         internal_symbol = self.btc_trade_data['internal_symbol']
+        assert self.bfo.cancel_all_future_order(internal_symbol)
+        assert self.bfo.close_position(internal_symbol)
         last_price = self.bfo.get_last_price(internal_symbol)
         assert last_price
         balance = self.bfo.get_future_balance()
         assert balance
         balance *= position_by_balance
         leverage, quantity = self.bfo.sr2_liquidation_calculator(last_price, sr2, balance, side)
+        print(leverage, quantity)
         self.btc_trade_data['leverage'] = leverage
-        # set leverage with isolated
+        assert self.bfo.change_margin_type(internal_symbol, 'isolated')
+        assert self.bfo.set_leverage(internal_symbol, leverage)
         # make market order
         # make stop order with reduce only
         # make limit order with reduce only
@@ -181,18 +183,19 @@ class BinanceBtcFutureDailyTrade:
         record_dir = 'data/Binance/BtcFutureDailyTrading/'
         if not os.path.exists(record_dir):
             os.makedirs(record_dir)
-        balance_data = pd.DataFrame()
+        bot_data = pd.DataFrame()
         if os.path.isfile(record_dir+file_name+'.csv'):
-            balance_data = pd.read_csv('{}.csv'.format(record_dir+file_name))
-        balance_dict = {
+            bot_data = pd.read_csv('{}.csv'.format(record_dir+file_name))
+        bot_data_dict = {
             'timestamp': self.bfo.binance.seconds(),
             'time': self.bfo.binance.iso8601(self.bfo.binance.milliseconds()),
             'btc_balance': btc_balance,
             'usdt_balance': usdt_balance,
+            'leverage': self.btc_trade_data['leverage'],
         }
-        balance_data = balance_data.append(balance_dict, ignore_index=True)
-        balance_data.to_csv("{}.csv".format(record_dir + file_name), mode='w', encoding='utf-8', index=False)
-        self.logger.info('Record trading data'.format(btc_balance))
+        bot_data = bot_data.append(bot_data_dict, ignore_index=True)
+        bot_data.to_csv("{}.csv".format(record_dir + file_name), mode='w', encoding='utf-8', index=False)
+        self.logger.info('Trading data recorded')
 
         # Show trading data
         if verbose:

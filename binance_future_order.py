@@ -138,6 +138,67 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger.info(f'Calculated leverage is {leverage}. Estimated liquidation price is {prev_lev_liq_price}')
         return leverage, quantity
 
+    def cancel_all_future_order(self, internal_symbol):
+        self.logger.info('Cancel all order')
+        param = {'symbol': internal_symbol}
+        cancel_result = self._try_until_timeout(self.binance.fapiPrivateDeleteAllOpenOrders, param,)
+        if cancel_result in self.error_list:
+            return False
+        self.logger.info(f'Cancel result: {cancel_result}')
+        return True
+
+    def get_position_information(self):
+        position_information = self._try_until_timeout(self.binance.fapiPrivateGetPositionRisk)
+        if position_information in self.error_list:
+            return False
+        return position_information
+
+    def change_margin_type(self, internal_symbol, margin_type):
+        upper_type = margin_type.upper()
+        margin_type_list = ['ISOLATED', 'CROSSED']
+        if upper_type not in margin_type_list:
+            raise ValueError(f'{upper_type} type is not defined')
+
+        self.logger.info(f'Change margin type to {upper_type}')
+        position_information = self.get_position_information()
+        assert position_information
+        for ticker_position in position_information:
+            if ticker_position['symbol'] == internal_symmbol:
+                if ticker_position['marginType'] == 'isolated' and upper_type == 'ISOLATED':
+                    self.logger.info(f'Current margin type is already isolated margin')
+                    return True
+                elif ticker_position['marginType'] == 'cross' and upper_type == 'CROSSED':
+                    self.logger.info(f'Current margin type is already cross margin')
+                    return True
+        param = {'symbol': internal_symbol,
+                 'marginType': upper_type
+                 }
+        change_result = self._try_until_timeout(self.binance.fapiPrivatePostMarginType, param)
+        if change_result in self.error_list:
+            return False
+        self.logger.info(f'Change result: {change_result}')
+        return True
+
+    def set_leverage(self, internal_symbol, leverage):
+        self.logger.info(f'Set leverage to {leverage}')
+        leverage = int(leverage)
+        if leverage > 125 or leverage < 1:
+            raise ValueError(f'Leverage {leverage} should be between 1 to 125 as a integer')
+        param = {'symbol': internal_symbol,
+                 'leverage': leverage,
+                 }
+        set_result = self._try_until_timeout(self.binance.fapiPrivatePostLeverage, param)
+        if set_result in self.error_list:
+            return False
+        self.logger.info(f'Set result: {set_result}')
+        return True
+
+    def create_future_order(self, internal_symbol):
+        raise NotImplementedError
+
+    def close_position(self, internal_symbol):
+        raise NotImplementedError
+
     # create margin order function
 
 
@@ -167,4 +228,8 @@ if __name__ == '__main__':
     # pprint(bfo.get_future_ticker_info(internal_symmbol))
     # pprint(bfo.get_future_balance())
     # print(bfo.liquidation_price_calculator(10800, 100, 100000, 'short'))
-    print(bfo.sr2_liquidation_calculator(9813, 9130, 100, 'long'))
+    # print(bfo.sr2_liquidation_calculator(9813, 9130, 100, 'long'))
+    # print(bfo.cancel_all_future_order(internal_symmbol))
+    # print(bfo.change_margin_type(internal_symmbol, 'crossed'))
+    # pprint(bfo.get_position_information())
+    # pprint(bfo.set_leverage(internal_symmbol, 13))

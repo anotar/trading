@@ -1,0 +1,2 @@
+[future trade]
+현재가+- 15% 이내의 가격에만 Limit order 배치 가능
