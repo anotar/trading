@@ -20,6 +20,11 @@ class BinanceFutureOrder(BinanceOrder):
                               (1000000, 0.01, 1300),
                               (5000000, 0.025, 16300)]
 
+        self.btc_spec = {'tick_size': 0.01,
+                         'minimum_quantity': 0.001,
+                         'maximum_quantity': 1000,
+                         }
+
     def get_future_ohlcv(self, internal_symbol, interval, limit=False):
         if limit:
             param = {'symbol': internal_symbol, 'interval': interval}
@@ -193,8 +198,65 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger.info(f'Set result: {set_result}')
         return True
 
-    def create_future_order(self, internal_symbol):
-        raise NotImplementedError
+    def create_future_order(self, internal_symbol, side, order_type, amount, price=0, stop_price=0,
+                            time_in_force='GTC'):
+        side = side.upper()
+        order_type = order_type.upper()
+        assert side in ['BUY', 'SELL']
+        assert order_type in ['LIMIT', 'MARKET', 'STOP', 'STOP_MARKET']
+        param = dict()
+        amount = self.amount_to_precision(internal_symbol, amount)
+
+        if order_type == 'LIMIT':
+            price = self.price_to_precision(internal_symbol, price)
+            param = {'symbol': internal_symbol,
+                     'side': side,
+                     'quantity': amount,
+                     'price': price,
+                     'stopLimitTimeInForce': time_in_force}
+        elif order_type == 'MARKET':
+            param = {'symbol': internal_symbol,
+                     'side': side,
+                     'quantity': amount,
+                     }
+        elif order_type == 'STOP':
+            price = self.price_to_precision(internal_symbol, price)
+            stop_price = self.price_to_precision(internal_symbol, stop_price)
+            param = {'symbol': internal_symbol,
+                     'side': side,
+                     'quantity': amount,
+                     'price': price,
+                     'stopPrice': stop_price,
+                     }
+        elif order_type == 'STOP_MARKET':
+            stop_price = self.price_to_precision(internal_symbol, stop_price)
+            param = {'symbol': internal_symbol,
+                     'side': side,
+                     'quantity': amount,
+                     'stopPrice': stop_price,
+                     }
+
+        order_result = self._try_until_timeout(self.binance.fapiPrivatePostOrder, param)
+        if order_result in self.error_list:
+            return False
+        else:
+            return order_result
+
+    def amount_to_precision(self, internal_symbol, amount):
+        assert internal_symbol == 'BTCUSDT'
+        tick_size = self.btc_spec['tick_size']
+        minimum_quantity = self.btc_spec['minimum_quantity']
+        maximum_quantity = self.btc_spec['maximum_quantity']
+        precise_amount = str((amount // minimum_quantity) * minimum_quantity)
+        return precise_amount
+
+    def price_to_precision(self, internal_symbol, price):
+        assert internal_symbol == 'BTCUSDT'
+        tick_size = self.btc_spec['tick_size']
+        minimum_quantity = self.btc_spec['minimum_quantity']
+        maximum_quantity = self.btc_spec['maximum_quantity']
+        precise_amount = str((price // tick_size) * tick_size)
+        return precise_amount
 
     def close_position(self, internal_symbol):
         raise NotImplementedError

@@ -591,4 +591,4 @@ if __name__ == '__main__':
     # pprint(bo.get_tickers_by_quote('BTC'))
     # pprint(bo.get_ticker_statistics('BTC/USDT'))
     # pprint(bo.binance.fetch_orders('LTC/BTC'))
-    # pprint(bo.create_oco_order('BTC/USDT', 'sell', 0.01, 9000, 5000, 4000))
+    pprint(bo.create_oco_order('BTC/USDT', 'sell', 0.01, 9000, 5000, 4000))
