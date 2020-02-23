@@ -152,11 +152,14 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger.info(f'Cancel result: {cancel_result}')
         return True
 
-    def get_position_information(self):
+    def get_position_information(self, internal_symbol):
         position_information = self._try_until_timeout(self.binance.fapiPrivateGetPositionRisk)
         if position_information in self.error_list:
             return False
-        return position_information
+        for ticker_position in position_information:
+            if ticker_position['symbol'] == internal_symbol:
+                return ticker_position
+        raise ValueError(f'Cannot get position. {internal_symbol} is not supported position')
 
     def change_margin_type(self, internal_symbol, margin_type):
         upper_type = margin_type.upper()
@@ -165,16 +168,17 @@ class BinanceFutureOrder(BinanceOrder):
             raise ValueError(f'{upper_type} type is not defined')
 
         self.logger.info(f'Change margin type to {upper_type}')
-        position_information = self.get_position_information()
+        position_information = self.get_position_information(internal_symbol)
         assert position_information
-        for ticker_position in position_information:
-            if ticker_position['symbol'] == internal_symmbol:
-                if ticker_position['marginType'] == 'isolated' and upper_type == 'ISOLATED':
-                    self.logger.info(f'Current margin type is already isolated margin')
-                    return True
-                elif ticker_position['marginType'] == 'cross' and upper_type == 'CROSSED':
-                    self.logger.info(f'Current margin type is already cross margin')
-                    return True
+        if float(position_information['positionAmt']):
+            self.logger.info('Position is exist. Exit change margin type sequence.')
+            return True
+        if position_information['marginType'] == 'isolated' and upper_type == 'ISOLATED':
+            self.logger.info(f'Current margin type is already isolated margin')
+            return True
+        elif position_information['marginType'] == 'cross' and upper_type == 'CROSSED':
+            self.logger.info(f'Current margin type is already cross margin')
+            return True
         param = {'symbol': internal_symbol,
                  'marginType': upper_type
                  }
@@ -199,11 +203,12 @@ class BinanceFutureOrder(BinanceOrder):
         return True
 
     def create_future_order(self, internal_symbol, side, order_type, amount, price=0, stop_price=0,
-                            time_in_force='GTC'):
+                            time_in_force='GTC', reduce_only=False):
         side = side.upper()
         order_type = order_type.upper()
         assert side in ['BUY', 'SELL']
         assert order_type in ['LIMIT', 'MARKET', 'STOP', 'STOP_MARKET']
+        reduce_only = 'true' if reduce_only else 'false'
         param = dict()
         amount = self.amount_to_precision(internal_symbol, amount)
 
@@ -211,20 +216,26 @@ class BinanceFutureOrder(BinanceOrder):
             price = self.price_to_precision(internal_symbol, price)
             param = {'symbol': internal_symbol,
                      'side': side,
+                     'type': order_type,
                      'quantity': amount,
+                     'reduceOnly': reduce_only,
                      'price': price,
-                     'stopLimitTimeInForce': time_in_force}
+                     'TimeInForce': time_in_force}
         elif order_type == 'MARKET':
             param = {'symbol': internal_symbol,
                      'side': side,
+                     'type': order_type,
                      'quantity': amount,
+                     'reduceOnly': reduce_only,
                      }
         elif order_type == 'STOP':
             price = self.price_to_precision(internal_symbol, price)
             stop_price = self.price_to_precision(internal_symbol, stop_price)
             param = {'symbol': internal_symbol,
                      'side': side,
+                     'type': order_type,
                      'quantity': amount,
+                     'reduceOnly': reduce_only,
                      'price': price,
                      'stopPrice': stop_price,
                      }
@@ -232,7 +243,9 @@ class BinanceFutureOrder(BinanceOrder):
             stop_price = self.price_to_precision(internal_symbol, stop_price)
             param = {'symbol': internal_symbol,
                      'side': side,
+                     'type': order_type,
                      'quantity': amount,
+                     'reduceOnly': reduce_only,
                      'stopPrice': stop_price,
                      }
 
@@ -259,7 +272,23 @@ class BinanceFutureOrder(BinanceOrder):
         return precise_amount
 
     def close_position(self, internal_symbol):
-        raise NotImplementedError
+        self.logger.info('Close current position')
+        position_info = self.get_position_information(internal_symbol)
+        assert position_info
+        position_amount = float(position_info['positionAmt'])
+        if not float(position_amount):
+            self.logger.info('There is no position. Exit close position sequence.')
+            return True
+        order_result = dict()
+        if position_amount > 0:
+            order_result = self.create_future_order(internal_symbol, 'sell', 'market', abs(position_amount))
+        else:
+            order_result = self.create_future_order(internal_symbol, 'buy', 'market', abs(position_amount))
+        assert order_result
+        self.logger.info(f'Close position order result: {order_result}')
+        return True
+
+
 
     # create margin order function
 
@@ -283,15 +312,18 @@ if __name__ == '__main__':
     bfo = BinanceFutureOrder(api_test['api_key'], api_test['api_secret'])
 
     param = {'symbol': 'BTCUSDT'}
-    internal_symmbol = 'BTCUSDT'
+    intrnl_symbol = 'BTCUSDT'
     # print(bfo.binance.fapiPublicGetTickerPrice(param))
-    # pprint(bfo.get_future_monthly_pivot(internal_symmbol))
-    # print(bfo.get_last_price(internal_symmbol))
-    # pprint(bfo.get_future_ticker_info(internal_symmbol))
+    # pprint(bfo.get_future_monthly_pivot(intrnl_symbol))
+    # print(bfo.get_last_price(intrnl_symbol))
+    # pprint(bfo.get_future_ticker_info(intrnl_symbol))
     # pprint(bfo.get_future_balance())
     # print(bfo.liquidation_price_calculator(10800, 100, 100000, 'short'))
     # print(bfo.sr2_liquidation_calculator(9813, 9130, 100, 'long'))
-    # print(bfo.cancel_all_future_order(internal_symmbol))
-    # print(bfo.change_margin_type(internal_symmbol, 'crossed'))
+    # print(bfo.cancel_all_future_order(intrnl_symbol))
+    # print(bfo.change_margin_type(intrnl_symbol, 'crossed'))
     # pprint(bfo.get_position_information())
-    # pprint(bfo.set_leverage(internal_symmbol, 13))
+    # pprint(bfo.set_leverage(intrnl_symbol, 13))
+    # pprint(bfo.create_future_order(intrnl_symbol, 'buy', 'market', 0.0111))
+    # pprint(bfo.create_future_order(intrnl_symbol, 'sell', 'limit', 0.0111, price=12000))
+    bfo.close_position(intrnl_symbol)

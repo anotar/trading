@@ -116,27 +116,32 @@ class BinanceBtcFutureDailyTrade:
             liquidation_day = liquidation_timestamp // self.daily_timestamp
             if quotient_day != liquidation_day:
                 self.btc_trade_data['btc_status'] = 'init'
+                self.btc_trade_data['liquidation_timestamp'] = 0
 
         btc_status = self.btc_trade_data['btc_status']
         if btc_status == 'init':
             if last_price >= pivot['p']:
-                assert self.switch_position('long', pivot['s2'])
+                assert self.switch_position('long', pivot)
                 self.btc_trade_data['btc_status'] = 'long'
             else:
-                assert self.switch_position('short', pivot['r2'])
+                assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'long':
             if prev_close < pivot['p']:
-                assert self.switch_position('short', pivot['r2'])
+                assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                assert self.switch_position('long', pivot['s2'])
+                assert self.switch_position('long', pivot)
                 self.btc_trade_data['btc_status'] = 'long'
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, side, sr2, position_by_balance=0.7):
+    def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
+        if side == 'long':
+            sr2 = pivot['s2']
+        else:
+            sr2 = pivot['r2']
         internal_symbol = self.btc_trade_data['internal_symbol']
         assert self.bfo.cancel_all_future_order(internal_symbol)
         assert self.bfo.close_position(internal_symbol)
@@ -146,17 +151,74 @@ class BinanceBtcFutureDailyTrade:
         assert balance
         balance *= position_by_balance
         leverage, quantity = self.bfo.sr2_liquidation_calculator(last_price, sr2, balance, side)
-        print(leverage, quantity)
+        limit_quantity = quantity * profit_order_ratio
         self.btc_trade_data['leverage'] = leverage
+
         assert self.bfo.change_margin_type(internal_symbol, 'isolated')
         assert self.bfo.set_leverage(internal_symbol, leverage)
-        # make market order
-        # make stop order with reduce only
-        # make limit order with reduce only
+
+        if side == 'long':
+            market_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'market', quantity)
+            assert market_order_result
+            self.logger.info(f'Long position market order result: {market_order_result}')
+
+            stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
+                                                             quantity, stop_price=pivot['s1'], reduce_only=True)
+            assert stop_order_result
+            self.logger.info(f'Long position stop order result: {stop_order_result}')
+
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+            limit_price = 0
+            if last_price < pivot['r1']:
+                limit_price = pivot['r1']
+            if last_price < pivot['r2']:
+                limit_price = pivot['r2']
+            if last_price < pivot['r3']:
+                limit_price = pivot['r3']
+            if not limit_price or limit_price > (last_price * (1 + price_outer_ratio)):
+                limit_price = last_price * (1 + price_outer_ratio)
+            limit_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'limit',
+                                                              limit_quantity, price=limit_price, reduce_only=True)
+            assert limit_order_result
+            self.logger.info(f'Long position limit profit order result: {limit_order_result}')
+        else:
+            market_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'market', quantity)
+            assert market_order_result
+            self.logger.info(f'Short position market order result: {market_order_result}')
+
+            stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
+                                                             quantity, stop_price=pivot['r1'], reduce_only=True)
+            assert stop_order_result
+            self.logger.info(f'Short position stop order result: {stop_order_result}')
+
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+            limit_price = 0
+            if last_price > pivot['s1']:
+                limit_price = pivot['s1']
+            if last_price > pivot['s2']:
+                limit_price = pivot['s2']
+            if last_price > pivot['s3']:
+                limit_price = pivot['s3']
+            if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
+                limit_price = last_price * (1 - price_outer_ratio)
+            limit_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'limit',
+                                                              limit_quantity, price=limit_price, reduce_only=True)
+            assert limit_order_result
+            self.logger.info(f'Short position limit profit order result: {limit_order_result}')
         return True
 
     def check_liquidation(self):
-        # check if stop order completed
+        self.logger.info('Check position status')
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        btc_status = self.btc_trade_data['btc_status']
+        position_info = self.bfo.get_position_information(internal_symbol)
+        assert position_info
+        position_amount = float(position_info['positionAmt'])
+        if btc_status != 'init' and not position_amount:
+            self.btc_trade_data['liquidation_timestamp'] = self.bfo.binance.seconds()
+            self.logger.info('There is no position. Liquidated.')
         return True
 
     def record_information(self, verbose=True):

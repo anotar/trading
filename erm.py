@@ -1,4 +1,2 @@
-import ccxt
-from pprint import pprint
-pprint(dir(ccxt.binance()))
-print(ccxt.binance.version)
+if float('0'):
+    print(1)
