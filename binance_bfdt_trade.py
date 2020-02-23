@@ -172,9 +172,9 @@ class BinanceBtcFutureDailyTrade:
             limit_price = 0
             if last_price < pivot['r1']:
                 limit_price = pivot['r1']
-            if last_price < pivot['r2']:
+            elif last_price < pivot['r2']:
                 limit_price = pivot['r2']
-            if last_price < pivot['r3']:
+            elif last_price < pivot['r3']:
                 limit_price = pivot['r3']
             if not limit_price or limit_price > (last_price * (1 + price_outer_ratio)):
                 limit_price = last_price * (1 + price_outer_ratio)
@@ -197,9 +197,9 @@ class BinanceBtcFutureDailyTrade:
             limit_price = 0
             if last_price > pivot['s1']:
                 limit_price = pivot['s1']
-            if last_price > pivot['s2']:
+            elif last_price > pivot['s2']:
                 limit_price = pivot['s2']
-            if last_price > pivot['s3']:
+            elif last_price > pivot['s3']:
                 limit_price = pivot['s3']
             if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
                 limit_price = last_price * (1 - price_outer_ratio)

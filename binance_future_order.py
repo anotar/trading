@@ -260,7 +260,7 @@ class BinanceFutureOrder(BinanceOrder):
         tick_size = self.btc_spec['tick_size']
         minimum_quantity = self.btc_spec['minimum_quantity']
         maximum_quantity = self.btc_spec['maximum_quantity']
-        precise_amount = str((amount // minimum_quantity) * minimum_quantity)
+        precise_amount = round((amount // minimum_quantity) * minimum_quantity, 8)
         return precise_amount
 
     def price_to_precision(self, internal_symbol, price):
@@ -268,8 +268,8 @@ class BinanceFutureOrder(BinanceOrder):
         tick_size = self.btc_spec['tick_size']
         minimum_quantity = self.btc_spec['minimum_quantity']
         maximum_quantity = self.btc_spec['maximum_quantity']
-        precise_amount = str((price // tick_size) * tick_size)
-        return precise_amount
+        precise_price = round(((price // tick_size) * tick_size), 8)
+        return precise_price
 
     def close_position(self, internal_symbol):
         self.logger.info('Close current position')
@@ -322,8 +322,8 @@ if __name__ == '__main__':
     # print(bfo.sr2_liquidation_calculator(9813, 9130, 100, 'long'))
     # print(bfo.cancel_all_future_order(intrnl_symbol))
     # print(bfo.change_margin_type(intrnl_symbol, 'crossed'))
-    # pprint(bfo.get_position_information())
+    pprint(bfo.get_position_information(intrnl_symbol))
     # pprint(bfo.set_leverage(intrnl_symbol, 13))
     # pprint(bfo.create_future_order(intrnl_symbol, 'buy', 'market', 0.0111))
     # pprint(bfo.create_future_order(intrnl_symbol, 'sell', 'limit', 0.0111, price=12000))
-    bfo.close_position(intrnl_symbol)
+    # bfo.close_position(intrnl_symbol)
