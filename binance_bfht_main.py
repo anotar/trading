@@ -2,6 +2,7 @@ from time import sleep
 import logging
 import os
 from logging import handlers
+from binance_bfht_trade import BinanceBtcFutureHourlyTrade
 
 
 def setup_logger(name):
