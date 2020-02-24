@@ -33,10 +33,10 @@ logger.info('Set up Binance BTC Future Hourly Trading...')
 with open('api/binance_ysjjah_gmail.txt', 'r') as f:
     api_keys = f.readlines()
 api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-binanceBFDT = (api_test['api_key'], api_test['api_secret'])
+binanceBFHT = BinanceBtcFutureHourlyTrade(api_test['api_key'], api_test['api_secret'])
 
 logger.info('Start Binance BTC Future Hourly Trading')
-binanceBFDT.start_trade()
+binanceBFHT.start_trade()
 while True:
     sleep(10)
 
