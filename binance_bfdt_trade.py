@@ -203,7 +203,7 @@ class BinanceBtcFutureDailyTrade:
                 limit_price = pivot['s3']
             if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
                 limit_price = last_price * (1 - price_outer_ratio)
-            limit_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'limit',
+            limit_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'limit',
                                                               limit_quantity, price=limit_price, reduce_only=True)
             assert limit_order_result
             self.logger.info(f'Short position limit profit order result: {limit_order_result}')

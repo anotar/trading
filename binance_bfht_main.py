@@ -1,4 +1,3 @@
-from binance_bfdt_trade import BinanceBtcFutureDailyTrade
 from time import sleep
 import logging
 import os
@@ -27,15 +26,15 @@ def setup_logger(name):
     return logger
 
 
-logger = setup_logger('binance_bfdt_main')
-logger.info('Set up Binance BTC Monthly Trading...')
+logger = setup_logger('binance_bfht_main')
+logger.info('Set up Binance BTC Future Hourly Trading...')
 
-with open('api/binance_oxerdu_gmail.txt', 'r') as f:
+with open('api/binance_ysjjah_gmail.txt', 'r') as f:
     api_keys = f.readlines()
 api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-binanceBFDT = BinanceBtcFutureDailyTrade(api_test['api_key'], api_test['api_secret'])
+binanceBFDT = (api_test['api_key'], api_test['api_secret'])
 
-logger.info('Start Binance BTC Future Daily Trading')
+logger.info('Start Binance BTC Future Hourly Trading')
 binanceBFDT.start_trade()
 while True:
     sleep(10)

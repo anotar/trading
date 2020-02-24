@@ -28,7 +28,7 @@ def setup_logger(name):
 
 
 logger = setup_logger('binance_bfdt_main')
-logger.info('Set up Binance BTC Monthly Trading...')
+logger.info('Set up Binance BTC Future Daily Trading...')
 
 with open('api/binance_oxerdu_gmail.txt', 'r') as f:
     api_keys = f.readlines()

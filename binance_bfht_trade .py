@@ -10,11 +10,11 @@ from binance_future_order import BinanceFutureOrder
 from copy import deepcopy
 
 
-class BinanceBtcFutureDailyTrade:
+class BinanceBtcFutureHourlyTrade:
     def __init__(self, api_key, api_secret):
         # basic setup
-        self.logger = setup_logger('binance_bfdt_trade')
-        self.logger.info("Setting Binance BTC Future Daily Trading Module...")
+        self.logger = setup_logger('binance_bfht_trade')
+        self.logger.info("Setting Binance BTC Future Hourly Trading Module...")
         self.bfo = BinanceFutureOrder(api_key, api_secret)
 
         self.trade_loop_interval = 1  # seconds
@@ -36,10 +36,10 @@ class BinanceBtcFutureDailyTrade:
         self.hourly_timestamp = 60 * 60
         self.daily_timestamp = 60 * 60 * 24
 
-        self.logger.info('Binance BTC Future Daily Trading Module Setup Completed')
+        self.logger.info('Binance BTC Future Hourly Trading Module Setup Completed')
 
     def start_trade(self):
-        self.logger.info('Setting up BFDT Trade Loop...')
+        self.logger.info('Setting up BFHT Trade Loop...')
         self.trade_loop_checker = True
 
         def trade_loop():
@@ -48,13 +48,13 @@ class BinanceBtcFutureDailyTrade:
                 try:
                     self.trade()
                 except Exception:
-                    self.logger.exception('Caught Error in BFDT Trade Loop')
+                    self.logger.exception('Caught Error in BFHT Trade Loop')
                 sleep(self.trade_loop_interval)
 
         self.trade_thread = threading.Thread(target=trade_loop)
         self.trade_thread.daemon = True
         self.trade_thread.start()
-        self.logger.info('Setup Completed. Start BFDT Trade Loop')
+        self.logger.info('Setup Completed. Start BFHT Trade Loop')
 
     def stop_trade(self):
         self.trade_loop_checker = False
@@ -65,7 +65,7 @@ class BinanceBtcFutureDailyTrade:
             max_try -= 1
         while self.trade_thread.is_alive():
             sleep(0.1)
-        self.logger.info('Successfully Stopped BFDT Trade Loop')
+        self.logger.info('Successfully Stopped BFHT Trade Loop')
 
     def check_seconds(self, dict_key, time, time_type='second', time_sync_offset=1):
         if time_type == 'minute':
@@ -82,7 +82,7 @@ class BinanceBtcFutureDailyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 1, time_type='hour'):
+        if self.check_seconds('btc_trade', 1, time_type='minute'):
             self.future_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
@@ -95,7 +95,7 @@ class BinanceBtcFutureDailyTrade:
 
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bfo.get_future_monthly_pivot(internal_symbol)
+        pivot = self.bfo.get_future_daily_pivot(internal_symbol)
         assert pivot
         self.logger.info(f'{symbol} Future Pivot: {pivot}')
         btc_info = self.bfo.get_future_ticker_info(internal_symbol)
@@ -105,16 +105,16 @@ class BinanceBtcFutureDailyTrade:
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1d', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1h', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
         if liquidation_timestamp:
-            quotient_day = self.bfo.binance.seconds() // self.daily_timestamp
-            liquidation_day = liquidation_timestamp // self.daily_timestamp
-            if quotient_day != liquidation_day:
+            quotient_hour = self.bfo.binance.seconds() // self.hourly_timestamp
+            liquidation_hour = liquidation_timestamp // self.hourly_timestamp
+            if quotient_hour != liquidation_hour:
                 self.btc_trade_data['btc_status'] = 'init'
                 self.btc_trade_data['liquidation_timestamp'] = 0
 
@@ -137,7 +137,7 @@ class BinanceBtcFutureDailyTrade:
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
+    def switch_position(self, side, pivot, position_by_balance=0.5, profit_order_ratio=0.5, price_outer_ratio=0.14):
         if side == 'long':
             sr2 = pivot['s2']
         else:
@@ -203,7 +203,7 @@ class BinanceBtcFutureDailyTrade:
                 limit_price = pivot['s3']
             if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
                 limit_price = last_price * (1 - price_outer_ratio)
-            limit_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'limit',
+            limit_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'limit',
                                                               limit_quantity, price=limit_price, reduce_only=True)
             assert limit_order_result
             self.logger.info(f'Short position limit profit order result: {limit_order_result}')
@@ -242,7 +242,7 @@ class BinanceBtcFutureDailyTrade:
 
         # save balance data
         file_name = 'bot_data_history'
-        record_dir = 'data/Binance/BtcFutureDailyTrading/'
+        record_dir = 'data/Binance/BtcFutureHourlyTrading/'
         if not os.path.exists(record_dir):
             os.makedirs(record_dir)
         bot_data = pd.DataFrame()
@@ -281,7 +281,7 @@ if __name__ == '__main__':
     with open('api/binance_ysjjah_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-    binanceBFDT = BinanceBtcFutureDailyTrade(api_test['api_key'], api_test['api_secret'])
+    binanceBFDT = BinanceBtcFutureHourlyTrade(api_test['api_key'], api_test['api_secret'])
 
     print('start trade')
     binanceBFDT.start_trade()
