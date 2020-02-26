@@ -74,6 +74,18 @@ class BinanceFutureOrder(BinanceOrder):
         pivot = self.get_pivot(high, low, close)
         return pivot
 
+    def get_future_hourly_pivot(self, internal_symbol):
+        ohlcv = self.get_future_ohlcv(internal_symbol, '1h', limit=5)
+        if ohlcv.empty:
+            return False
+        if not len(ohlcv) > 1:
+            return False
+        high = ohlcv['high'].iloc[-2]
+        low = ohlcv['low'].iloc[-2]
+        close = ohlcv['close'].iloc[-2]
+        pivot = self.get_pivot(high, low, close)
+        return pivot
+
     def get_last_price(self, internal_symbol):
         param = {'symbol': internal_symbol}
         ticker_info = self._try_until_timeout(self.binance.fapiPublicGetTickerPrice, param)
