@@ -108,7 +108,7 @@ class BinanceBtcFutureMinutelyTrade:
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1h', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1m', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
