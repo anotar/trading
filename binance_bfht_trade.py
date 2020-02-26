@@ -216,7 +216,7 @@ class BinanceBtcFutureHourlyTrade:
         position_info = self.bfo.get_position_information(internal_symbol)
         assert position_info
         position_amount = float(position_info['positionAmt'])
-        if btc_status != 'init' and not position_amount:
+        if btc_status != 'init' and not position_amount and not self.btc_trade_data['liquidation_timestamp']:
             self.btc_trade_data['liquidation_timestamp'] = self.bfo.binance.seconds()
             self.logger.info('There is no position. Liquidated.')
         return True
