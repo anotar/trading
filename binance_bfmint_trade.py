@@ -85,7 +85,7 @@ class BinanceBtcFutureMinutelyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 5, time_type='second'):
+        if self.check_seconds('btc_trade', 1, time_type='minute'):
             self.future_trade()
 
         if self.check_seconds('record', 8, time_type='hour'):
@@ -98,9 +98,9 @@ class BinanceBtcFutureMinutelyTrade:
 
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bfo.get_future_hourly_pivot(internal_symbol)
+        pivot = self.bfo.get_future_hourly_pivot(internal_symbol, hour=6)
         assert pivot
-        self.logger.info(f'{symbol} Future Pivot: {pivot}')
+        self.logger.info(f"{symbol} future Pivot point: {round(pivot['p'], 2)}")
         btc_info = self.bfo.get_future_ticker_info(internal_symbol)
         assert btc_info
         last_price = btc_info['last_price']
@@ -108,15 +108,15 @@ class BinanceBtcFutureMinutelyTrade:
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1m', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '5m', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
         if liquidation_timestamp:
-            quotient_hour = self.bfo.binance.seconds() // self.minute_timestamp
-            liquidation_hour = liquidation_timestamp // self.minute_timestamp
+            quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 5)
+            liquidation_hour = liquidation_timestamp // (self.minute_timestamp * 5)
             if quotient_hour != liquidation_hour:
                 self.btc_trade_data['btc_status'] = 'init'
                 self.btc_trade_data['liquidation_timestamp'] = 0
@@ -140,7 +140,7 @@ class BinanceBtcFutureMinutelyTrade:
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, side, pivot, position_by_balance=0.5, profit_order_ratio=0.5, price_outer_ratio=0.14):
+    def switch_position(self, side, pivot, position_by_balance=0.3, profit_order_ratio=0.5, price_outer_ratio=0.14):
         if side == 'long':
             sr2 = pivot['s2']
         else:

@@ -74,8 +74,9 @@ class BinanceFutureOrder(BinanceOrder):
         pivot = self.get_pivot(high, low, close)
         return pivot
 
-    def get_future_hourly_pivot(self, internal_symbol):
-        ohlcv = self.get_future_ohlcv(internal_symbol, '1h', limit=5)
+    def get_future_hourly_pivot(self, internal_symbol, hour=1):
+        assert hour in [1, 2, 4, 6, 8, 12]
+        ohlcv = self.get_future_ohlcv(internal_symbol, f'{hour}h', limit=5)
         if ohlcv.empty:
             return False
         if not len(ohlcv) > 1:
@@ -145,7 +146,7 @@ class BinanceFutureOrder(BinanceOrder):
             is_over_sr2 = False
             while not is_over_sr2 or leverage > 125:
                 leverage += 1
-                quantity = round(leverage * balance / entry_price, 3)
+                quantity = round(leverage * balance / entry_price, 8)
                 liquidation_price = self.liquidation_price_calculator(entry_price, quantity, balance, 'short')
                 if liquidation_price < sr2:
                     leverage -= 1
@@ -156,14 +157,14 @@ class BinanceFutureOrder(BinanceOrder):
             is_under_sr2 = False
             while not is_under_sr2:
                 leverage += 1
-                quantity = round(leverage * balance / entry_price, 3)
+                quantity = round(leverage * balance / entry_price, 8)
                 liquidation_price = self.liquidation_price_calculator(entry_price, quantity, balance, 'long')
                 if liquidation_price > sr2 or leverage > 125:
                     leverage -= 1
                     is_under_sr2 = True
                 else:
                     prev_lev_liq_price = liquidation_price
-        quantity = round(leverage * balance / entry_price, 3)
+        quantity = round(leverage * balance / entry_price, 8)
         self.logger.info(f'Calculated leverage is {leverage}. Estimated liquidation price is {prev_lev_liq_price}')
         return leverage, quantity
 
