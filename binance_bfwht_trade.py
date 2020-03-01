@@ -107,6 +107,7 @@ class BinanceBtcFutureWeeklyHourTrade:
             return False
         ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '4h', limit=5)
         assert not ohlcv.empty
+        prev_open = ohlcv.iloc[-2]['open']
         prev_close = ohlcv.iloc[-2]['close']
 
         assert self.check_liquidation()
@@ -120,10 +121,10 @@ class BinanceBtcFutureWeeklyHourTrade:
 
         btc_status = self.btc_trade_data['btc_status']
         if btc_status == 'init':
-            if last_price >= pivot['p']:
+            if prev_close >= pivot['p'] >= prev_open:
                 assert self.switch_position('long', pivot)
                 self.btc_trade_data['btc_status'] = 'long'
-            else:
+            elif prev_close < pivot['p'] <= prev_open:
                 assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'long':
