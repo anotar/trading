@@ -62,6 +62,18 @@ class BinanceFutureOrder(BinanceOrder):
         pivot = self.get_pivot(high, low, close)
         return pivot
 
+    def get_future_weekly_pivot(self, internal_symbol):
+        ohlcv = self.get_future_ohlcv(internal_symbol, '1w', limit=5)
+        if ohlcv.empty:
+            return False
+        if not len(ohlcv) > 1:
+            return False
+        high = ohlcv['high'].iloc[-2]
+        low = ohlcv['low'].iloc[-2]
+        close = ohlcv['close'].iloc[-2]
+        pivot = self.get_pivot(high, low, close)
+        return pivot
+
     def get_future_daily_pivot(self, internal_symbol):
         ohlcv = self.get_future_ohlcv(internal_symbol, '1d', limit=5)
         if ohlcv.empty:

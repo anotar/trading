@@ -10,11 +10,11 @@ from binance_future_order import BinanceFutureOrder
 from copy import deepcopy
 
 
-class BinanceBtcFutureMinutelyTrade:
+class BinanceBtcFutureWeeklyHourTrade:
     def __init__(self, api_key, api_secret):
         # basic setup
-        self.logger = setup_logger('binance_bfmint_trade')
-        self.logger.info("Setting Binance BTC Future Minutely Trading Module...")
+        self.logger = setup_logger('binance_bfwht_trade')
+        self.logger.info("Setting Binance BTC Future Weekly Hour Trading Module...")
         self.bfo = BinanceFutureOrder(api_key, api_secret)
 
         self.trade_loop_interval = 1  # seconds
@@ -32,15 +32,14 @@ class BinanceBtcFutureMinutelyTrade:
                                'position_quantity': 0,
                                }
 
-        self.second_timestamp = 1
         self.minute_timestamp = 60
         self.hourly_timestamp = 60 * 60
         self.daily_timestamp = 60 * 60 * 24
 
-        self.logger.info('Binance BTC Future Minutely Trading Module Setup Completed')
+        self.logger.info('Binance BTC Future Weekly Hour Trading Module Setup Completed')
 
     def start_trade(self):
-        self.logger.info('Setting up BFMinT Trade Loop...')
+        self.logger.info('Setting up BFWHT Trade Loop...')
         self.trade_loop_checker = True
 
         def trade_loop():
@@ -49,13 +48,13 @@ class BinanceBtcFutureMinutelyTrade:
                 try:
                     self.trade()
                 except Exception:
-                    self.logger.exception('Caught Error in BFMinT Trade Loop')
+                    self.logger.exception('Caught Error in BFWHT Trade Loop')
                 sleep(self.trade_loop_interval)
 
         self.trade_thread = threading.Thread(target=trade_loop)
         self.trade_thread.daemon = True
         self.trade_thread.start()
-        self.logger.info('Setup Completed. Start BFMinT Trade Loop')
+        self.logger.info('Setup Completed. Start BFWHT Trade Loop')
 
     def stop_trade(self):
         self.trade_loop_checker = False
@@ -66,12 +65,10 @@ class BinanceBtcFutureMinutelyTrade:
             max_try -= 1
         while self.trade_thread.is_alive():
             sleep(0.1)
-        self.logger.info('Successfully Stopped BFMinT Trade Loop')
+        self.logger.info('Successfully Stopped BFWHT Trade Loop')
 
     def check_seconds(self, dict_key, time, time_type='second', time_sync_offset=1):
-        if time_type == 'second':
-            time *= self.second_timestamp
-        elif time_type == 'minute':
+        if time_type == 'minute':
             time *= self.minute_timestamp
         elif time_type == 'hour':
             time *= self.hourly_timestamp
@@ -85,10 +82,10 @@ class BinanceBtcFutureMinutelyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 1, time_type='minute'):
+        if self.check_seconds('btc_trade', 1, time_type='hour'):
             self.future_trade()
 
-        if self.check_seconds('record', 8, time_type='hour'):
+        if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
 
     def future_trade(self):
@@ -98,9 +95,9 @@ class BinanceBtcFutureMinutelyTrade:
 
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bfo.get_future_hourly_pivot(internal_symbol, hour=6)
+        pivot = self.bfo.get_future_weekly_pivot(internal_symbol)
         assert pivot
-        self.logger.info(f"{symbol} future Pivot point: {round(pivot['p'], 2)}")
+        self.logger.info(f'{symbol} Future Pivot: {pivot}')
         btc_info = self.bfo.get_future_ticker_info(internal_symbol)
         assert btc_info
         last_price = btc_info['last_price']
@@ -108,16 +105,16 @@ class BinanceBtcFutureMinutelyTrade:
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '5m', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '4h', limit=5)
         assert not ohlcv.empty
         prev_close = ohlcv.iloc[-2]['close']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
         if liquidation_timestamp:
-            quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 5)
-            liquidation_hour = liquidation_timestamp // (self.minute_timestamp * 5)
-            if quotient_hour != liquidation_hour:
+            quotient_day = self.bfo.binance.seconds() // (self.hourly_timestamp * 4)
+            liquidation_day = liquidation_timestamp // (self.hourly_timestamp * 4)
+            if quotient_day != liquidation_day:
                 self.btc_trade_data['btc_status'] = 'init'
                 self.btc_trade_data['liquidation_timestamp'] = 0
 
@@ -140,7 +137,7 @@ class BinanceBtcFutureMinutelyTrade:
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, side, pivot, position_by_balance=0.3, profit_order_ratio=0.5, price_outer_ratio=0.14):
+    def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
         if side == 'long':
             sr2 = pivot['s2']
         else:
@@ -174,8 +171,10 @@ class BinanceBtcFutureMinutelyTrade:
             assert last_price
             limit_price = 0
             if last_price < pivot['r1']:
-                limit_price = pivot['r2']
+                limit_price = pivot['r1']
             elif last_price < pivot['r2']:
+                limit_price = pivot['r2']
+            elif last_price < pivot['r3']:
                 limit_price = pivot['r3']
             if not limit_price or limit_price > (last_price * (1 + price_outer_ratio)):
                 limit_price = last_price * (1 + price_outer_ratio)
@@ -197,8 +196,10 @@ class BinanceBtcFutureMinutelyTrade:
             assert last_price
             limit_price = 0
             if last_price > pivot['s1']:
-                limit_price = pivot['s2']
+                limit_price = pivot['s1']
             elif last_price > pivot['s2']:
+                limit_price = pivot['s2']
+            elif last_price > pivot['s3']:
                 limit_price = pivot['s3']
             if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
                 limit_price = last_price * (1 - price_outer_ratio)
@@ -241,7 +242,7 @@ class BinanceBtcFutureMinutelyTrade:
 
         # save balance data
         file_name = 'bot_data_history'
-        record_dir = 'data/Binance/BtcFutureMinutelyTrading/'
+        record_dir = 'data/Binance/BtcFutureWeeklyHourTrading/'
         if not os.path.exists(record_dir):
             os.makedirs(record_dir)
         bot_data = pd.DataFrame()
@@ -280,12 +281,12 @@ if __name__ == '__main__':
     with open('api/binance_ysjjkh_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-    binanceBFMinT = BinanceBtcFutureMinutelyTrade(api_test['api_key'], api_test['api_secret'])
+    binanceBFWHT = BinanceBtcFutureWeeklyHourTrade(api_test['api_key'], api_test['api_secret'])
 
     print('start trade')
-    binanceBFMinT.start_trade()
+    binanceBFWHT.start_trade()
     while True:
         sleep(100)
     print('stop trade')
-    binanceBFMinT.stop_trade()
+    binanceBFWHT.stop_trade()
 

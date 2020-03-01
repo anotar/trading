@@ -1,8 +1,8 @@
+from binance_bfwht_trade import BinanceBtcFutureWeeklyHourTrade
 from time import sleep
 import logging
 import os
 from logging import handlers
-from binance_bfmint_trade import BinanceBtcFutureMinutelyTrade
 
 
 def setup_logger(name):
@@ -27,16 +27,16 @@ def setup_logger(name):
     return logger
 
 
-logger = setup_logger('binance_bfmint_main')
-logger.info('Set up Binance BTC Future Minutely Trading...')
+logger = setup_logger('binance_bfwht_main')
+logger.info('Set up Binance BTC Future Weekly Hour Trading...')
 
 with open('api/binance_ysjjkh_gmail.txt', 'r') as f:
     api_keys = f.readlines()
 api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-binanceBFMinT = BinanceBtcFutureMinutelyTrade(api_test['api_key'], api_test['api_secret'])
+binanceBFWHT = BinanceBtcFutureWeeklyHourTrade(api_test['api_key'], api_test['api_secret'])
 
-logger.info('Start Binance BTC Future Minutely Trading')
-binanceBFMinT.start_trade()
+logger.info('Start Binance BTC Future Weekly Hour Trading')
+binanceBFWHT.start_trade()
 while True:
     sleep(10)
 
