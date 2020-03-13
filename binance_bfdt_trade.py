@@ -127,6 +127,9 @@ class BinanceBtcFutureDailyTrade:
             elif prev_close < pivot['p'] <= prev_open:
                 assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
+            else:
+                assert self.bfo.cancel_all_future_order(internal_symbol)
+                assert self.bfo.close_position(internal_symbol)
         elif btc_status == 'long':
             if prev_close < pivot['p']:
                 assert self.switch_position('short', pivot)
