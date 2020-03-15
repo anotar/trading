@@ -446,8 +446,7 @@ class BinanceAltDailyTrade:
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
                 continue
-
-            if trading_alt_stat['s1_quantity']:
+            elif trading_alt_stat['s1_quantity']:
                 self.logger.info(f'{trading_alt}: Stop order has been triggered')
                 self.cancel_trading_alt_orders(trading_alt)
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
