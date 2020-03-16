@@ -30,6 +30,8 @@ class BinanceBtcFutureWeeklyHourTrade:
                                'liquidation_timestamp': 0,
                                'leverage': 0,
                                'position_quantity': 0,
+                               'pivot_timestamp': 0,
+                               'prev_pivot': dict(),
                                }
 
         self.minute_timestamp = 60
@@ -109,6 +111,23 @@ class BinanceBtcFutureWeeklyHourTrade:
         assert not ohlcv.empty
         prev_open = ohlcv.iloc[-2]['open']
         prev_close = ohlcv.iloc[-2]['close']
+
+        prev_day = self.btc_trade_data['pivot_timestamp'] // self.daily_timestamp
+        delayed_day = (self.bfo.binance.seconds() - (self.hourly_timestamp * 4)) // self.daily_timestamp
+        prev_pivot = self.btc_trade_data['prev_pivot']
+        if not prev_pivot:
+            self.btc_trade_data['prev_pivot'] = pivot
+            self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
+        elif prev_pivot['p'] != pivot['p']:
+            if prev_day == delayed_day:
+                pivot = prev_pivot
+                self.logger.info('Current pivot is new pivot. Delay for 4 hour')
+            else:
+                self.btc_trade_data['prev_pivot'] = pivot
+                self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
+                self.logger.info('4 hour passed. Change to new pivot')
+        else:
+            self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']

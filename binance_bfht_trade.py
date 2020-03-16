@@ -126,6 +126,8 @@ class BinanceBtcFutureHourlyTrade:
                 self.btc_trade_data['prev_pivot'] = pivot
                 self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
                 self.logger.info('An hour passed. Change to new pivot')
+        else:
+            self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']

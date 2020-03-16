@@ -1,2 +1,4 @@
-if float('0'):
-    print(1)
+import ccxt
+bi = ccxt.binance()
+iso = bi.iso8601(bi.milliseconds()).iso
+print(iso)
