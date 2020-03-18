@@ -121,7 +121,7 @@ class BinanceBtcFutureHourlyTrade:
         elif prev_pivot['p'] != pivot['p']:
             if prev_day == delayed_day:
                 pivot = prev_pivot
-                self.logger.info('Current pivot is new pivot. Delay for an hour')
+                self.logger.info('Current pivot is new pivot. Delay for a hour')
             else:
                 self.btc_trade_data['prev_pivot'] = pivot
                 self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
