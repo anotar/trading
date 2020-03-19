@@ -157,7 +157,8 @@ class BinanceBtcFutureHourlyTrade:
 
         self.logger.info('Exit Future Trade')
 
-    def switch_position(self, side, pivot, position_by_balance=0.5, profit_order_ratio=0.5, price_outer_ratio=0.14):
+    def switch_position(self, side, pivot, position_by_balance=0.5, profit_order_ratio=0.5, price_outer_ratio=0.14,
+                        stop_price_ratio=0.001):
         if side == 'long':
             sr2 = pivot['s2']
         else:
@@ -182,8 +183,9 @@ class BinanceBtcFutureHourlyTrade:
             assert market_order_result
             self.logger.info(f'Long position market order result: {market_order_result}')
 
+            stop_price = pivot['p'] * (1 - stop_price_ratio)
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
-                                                             quantity, stop_price=pivot['p'], reduce_only=True)
+                                                             quantity, stop_price=stop_price, reduce_only=True)
             assert stop_order_result
             self.logger.info(f'Long position stop order result: {stop_order_result}')
 
@@ -207,8 +209,9 @@ class BinanceBtcFutureHourlyTrade:
             assert market_order_result
             self.logger.info(f'Short position market order result: {market_order_result}')
 
+            stop_price = pivot['p'] * (1 + stop_price_ratio)
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
-                                                             quantity, stop_price=pivot['p'], reduce_only=True)
+                                                             quantity, stop_price=stop_price, reduce_only=True)
             assert stop_order_result
             self.logger.info(f'Short position stop order result: {stop_order_result}')
 
