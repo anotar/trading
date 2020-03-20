@@ -141,19 +141,59 @@ class BinanceBtcFutureHourlyTrade:
         btc_status = self.btc_trade_data['btc_status']
         if btc_status == 'init':
             if prev_close >= pivot['p'] >= prev_open:
-                assert self.switch_position('long', pivot)
+                weekly_pivot = self.bfo.get_future_weekly_pivot(internal_symbol)
+                assert weekly_pivot
+                weekly_pivot_p = round(weekly_pivot['p'], 2)
+                if prev_close >= weekly_pivot['p']:
+                    self.logger.info(f'Previous close({prev_close}) is more than Weekly pivot P({weekly_pivot_p}). '
+                                     f'switch position with 70% of balance')
+                    assert self.switch_position('long', pivot, position_by_balance=0.7)
+                else:
+                    self.logger.info(f'Previous close({prev_close}) is less than Weekly pivot P({weekly_pivot_p}). '
+                                     f'switch position with 30% of balance')
+                    assert self.switch_position('long', pivot, position_by_balance=0.3)
                 self.btc_trade_data['btc_status'] = 'long'
             elif prev_close < pivot['p'] <= prev_open:
-                assert self.switch_position('short', pivot)
-                self.btc_trade_data['btc_status'] = 'short'
-        elif btc_status == 'long':
-            if prev_close < pivot['p']:
-                assert self.switch_position('short', pivot)
+                weekly_pivot = self.bfo.get_future_weekly_pivot(internal_symbol)
+                assert weekly_pivot
+                weekly_pivot_p = round(weekly_pivot['p'], 2)
+                if prev_close < weekly_pivot['p']:
+                    self.logger.info(f'Previous close({prev_close}) is less than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 70% of balance')
+                    assert self.switch_position('short', pivot, position_by_balance=0.7)
+                else:
+                    self.logger.info(f'Previous close({prev_close}) is more than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 30% of balance')
+                    assert self.switch_position('short', pivot, position_by_balance=0.3)
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                assert self.switch_position('long', pivot)
+                weekly_pivot = self.bfo.get_future_weekly_pivot(internal_symbol)
+                assert weekly_pivot
+                weekly_pivot_p = round(weekly_pivot['p'], 2)
+                if prev_close >= weekly_pivot['p']:
+                    self.logger.info(f'Previous close({prev_close}) is more than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 70% of balance')
+                    assert self.switch_position('long', pivot, position_by_balance=0.7)
+                else:
+                    self.logger.info(f'Previous close({prev_close}) is less than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 30% of balance')
+                    assert self.switch_position('long', pivot, position_by_balance=0.3)
                 self.btc_trade_data['btc_status'] = 'long'
+        elif btc_status == 'long':
+            if prev_close < pivot['p']:
+                weekly_pivot = self.bfo.get_future_weekly_pivot(internal_symbol)
+                assert weekly_pivot
+                weekly_pivot_p = round(weekly_pivot['p'], 2)
+                if prev_close < weekly_pivot['p']:
+                    self.logger.info(f'Previous close({prev_close}) is less than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 70% of balance')
+                    assert self.switch_position('short', pivot, position_by_balance=0.7)
+                else:
+                    self.logger.info(f'Previous close({prev_close}) is more than Weekly pivot P({weekly_pivot_p}). '
+                                     f'Switch position with 30% of balance')
+                    assert self.switch_position('short', pivot, position_by_balance=0.3)
+                self.btc_trade_data['btc_status'] = 'short'
 
         self.logger.info('Exit Future Trade')
 
