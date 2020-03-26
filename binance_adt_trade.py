@@ -27,7 +27,7 @@ class BinanceAltDailyTrade:
 
         self.btc_trade_data = {'btc_status': 'init',  # 'buy' or 'sell'
                                'base_symbol': 'BTC/USDT',
-                               'initial_pivot': 0,
+                               'initial_pivot': -666,
                                }
 
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
@@ -150,7 +150,7 @@ class BinanceAltDailyTrade:
                 self.sell_all_btc()
                 self.btc_trade_data['btc_status'] = 'sell'
                 self.logger.info('Change btc status to \'sell\'')
-                self.btc_trade_data['initial_pivot'] = 0
+                self.btc_trade_data['initial_pivot'] = -666
                 self.logger.info('Initialize initial_pivot')
 
         elif prev_close < pivot['p']:
@@ -161,7 +161,7 @@ class BinanceAltDailyTrade:
                 self.logger.info('Update previous month status')
                 self.btc_trade_data['btc_status'] = 'sell'
                 self.logger.info('Change btc status to \'sell\'')
-                self.btc_trade_data['initial_pivot'] = 0
+                self.btc_trade_data['initial_pivot'] = -666
                 self.logger.info('Initialize initial_pivot')
 
         elif curr_low >= pivot['p']:
