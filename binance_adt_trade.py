@@ -398,7 +398,8 @@ class BinanceAltDailyTrade:
                 trading_alt_stat['s1_quantity'] = total_stop_quantity
         self.logger.info('Checked all trading alts status')
 
-    def manage_trading_alts(self, r2_quantity_ratio=0.2, r3_quantity_ratio=0.3, limit_price_ratio=0.1):
+    def manage_trading_alts(self, r2_quantity_ratio=0.2, r3_quantity_ratio=0.3, limit_price_ratio=0.1,
+                            r2_hard_profit_ratio=0.15, r3_hard_profit_ratio=0.3):
         self.logger.info('Managing trading alts order...')
         trading_alts = list(self.alt_trade_data['trading_alts'].keys())
         assert self.bo.update_market_data()
@@ -460,6 +461,12 @@ class BinanceAltDailyTrade:
 
             if not trading_alt_stat['r3_order']['order_list_id']:
                 self.logger.info(f'{trading_alt}: Create pivot r3 OCO order')
+
+                if r3_price < last_price:
+                    self.logger.info(f'Last price is greater than R3 price. '
+                                     f'change R3 price to (Last price + {r3_hard_profit_ratio * 100}%)')
+                    r3_price *= 1 + r3_hard_profit_ratio
+
                 r3_order_result = self.bo.create_oco_order(trading_alt, 'sell', r3_amount, r3_price,
                                                            stop_price, stop_limit_price)
                 assert r3_order_result
@@ -475,6 +482,12 @@ class BinanceAltDailyTrade:
 
             if not trading_alt_stat['r2_order']['order_list_id']:
                 self.logger.info(f'{trading_alt}: Create pivot r2 OCO order')
+
+                if r2_price < last_price:
+                    self.logger.info(f'Last price is greater than R2 price. '
+                                     f'change R2 price to (Last price + {r2_hard_profit_ratio * 100}%)')
+                    r2_price *= 1 + r2_hard_profit_ratio
+
                 r2_order_result = self.bo.create_oco_order(trading_alt, 'sell', r2_amount, r2_price,
                                                            stop_price, stop_limit_price)
                 assert r2_order_result
