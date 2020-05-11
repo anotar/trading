@@ -180,10 +180,19 @@ class BinanceFutureOrder(BinanceOrder):
         self.logger.info(f'Calculated leverage is {leverage}. Estimated liquidation price is {prev_lev_liq_price}')
         return leverage, quantity
 
+    def cancel_future_order(self, internal_symbol, order_id):
+        self.logger.info('Cancel an order')
+        param = {'symbol': internal_symbol, 'orderId': order_id}
+        cancel_result = self._try_until_timeout(self.binance.fapiPrivateDeleteOrder, param)
+        if cancel_result in self.error_list:
+            return False
+        self.logger.info(f'Cancel result: {cancel_result}')
+        return True
+
     def cancel_all_future_order(self, internal_symbol):
         self.logger.info('Cancel all order')
         param = {'symbol': internal_symbol}
-        cancel_result = self._try_until_timeout(self.binance.fapiPrivateDeleteAllOpenOrders, param,)
+        cancel_result = self._try_until_timeout(self.binance.fapiPrivateDeleteAllOpenOrders, param)
         if cancel_result in self.error_list:
             return False
         self.logger.info(f'Cancel result: {cancel_result}')

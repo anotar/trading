@@ -24,7 +24,7 @@ class BinanceBtcFutureWeeklyHourTrade:
                                      'record': 0,
                                      }
 
-        self.btc_trade_data = {'btc_status': 'init',  # 'long' or 'short' or 'liq'
+        self.btc_trade_data = {'btc_status': 'init',  # 'long' or 'short' or 'init'
                                'base_symbol': 'BTC/USDT',
                                'internal_symbol': 'BTCUSDT',
                                'liquidation_timestamp': 0,
@@ -32,6 +32,10 @@ class BinanceBtcFutureWeeklyHourTrade:
                                'position_quantity': 0,
                                'pivot_timestamp': 0,
                                'prev_pivot': dict(),
+                               'stop_order_data': {'stop_order_location': 0,  # 0 is Pivot, 1 is SR1, 2 is SR2
+                                                   'stop_order_id': 0,
+                                                   'stop_order_quantity': 0,
+                                                   },
                                }
 
         self.minute_timestamp = 60
@@ -132,30 +136,113 @@ class BinanceBtcFutureWeeklyHourTrade:
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
         if liquidation_timestamp:
-            quotient_day = self.bfo.binance.seconds() // (self.hourly_timestamp * 4)
-            liquidation_day = liquidation_timestamp // (self.hourly_timestamp * 4)
-            if quotient_day != liquidation_day:
+            quotient_hour = self.bfo.binance.seconds() // (self.hourly_timestamp * 4)
+            liquidation_hour = liquidation_timestamp // (self.hourly_timestamp * 4)
+            if quotient_hour != liquidation_hour:
                 self.btc_trade_data['btc_status'] = 'init'
                 self.btc_trade_data['liquidation_timestamp'] = 0
+
+        self.manage_stop_price(pivot, prev_close)
 
         btc_status = self.btc_trade_data['btc_status']
         if btc_status == 'init':
             if prev_close >= pivot['p'] >= prev_open:
+                self.reset_stop_order_data()
                 assert self.switch_position('long', pivot)
                 self.btc_trade_data['btc_status'] = 'long'
             elif prev_close < pivot['p'] <= prev_open:
+                self.reset_stop_order_data()
                 assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
+            else:
+                assert self.bfo.cancel_all_future_order(internal_symbol)
+                assert self.bfo.close_position(internal_symbol)
         elif btc_status == 'long':
             if prev_close < pivot['p']:
+                self.reset_stop_order_data()
                 assert self.switch_position('short', pivot)
                 self.btc_trade_data['btc_status'] = 'short'
         elif btc_status == 'short':
             if prev_close > pivot['p']:
+                self.reset_stop_order_data()
                 assert self.switch_position('long', pivot)
                 self.btc_trade_data['btc_status'] = 'long'
 
         self.logger.info('Exit Future Trade')
+
+    def reset_stop_order_data(self):
+        self.btc_trade_data['stop_order_data']['stop_order_location'] = 0
+        self.btc_trade_data['stop_order_data']['stop_order_id'] = 0
+        self.btc_trade_data['stop_order_data']['stop_order_quantity'] = 0
+
+    def manage_stop_price(self, pivot, prev_close):
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        stop_order_location = self.btc_trade_data['stop_order_data']['stop_order_location']
+        btc_status = self.btc_trade_data['btc_status']
+        stop_order_id = self.btc_trade_data['stop_order_data']['stop_order_id']
+        stop_order_quantity = self.btc_trade_data['stop_order_data']['stop_order_quantity']
+
+        if btc_status == 'long':
+            if stop_order_location is 0 and prev_close >= pivot['r1']:
+                self.logger.info('Move stop price to pivot P')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['p'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+                self.logger.info(f'Changed long position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 1
+            elif stop_order_location is 1 and prev_close >= pivot['r2']:
+                self.logger.info('Move stop price to pivot R1')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['r1'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+                self.logger.info(f'Changed long position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 2
+            elif stop_order_location is 2 and prev_close >= pivot['r3']:
+                self.logger.info('Move stop price to pivot R2')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['r2'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.logger.info(f'Changed long position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
+
+        elif btc_status == 'short':
+            if stop_order_location is 0 and prev_close <= pivot['s1']:
+                self.logger.info('Move stop price to pivot P')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['p'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+                self.logger.info(f'Changed short position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 1
+            elif stop_order_location is 1 and prev_close <= pivot['s2']:
+                self.logger.info('Move stop price to pivot S1')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['s1'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+                self.logger.info(f'Changed short position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 2
+            elif stop_order_location is 2 and prev_close <= pivot['s3']:
+                self.logger.info('Move stop price to pivot S2')
+                assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
+                                                                 stop_order_quantity, stop_price=pivot['s2'],
+                                                                 reduce_only=True)
+                assert stop_order_result
+                self.logger.info(f'Changed short position stop order result: {stop_order_result}')
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
 
     def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
         if side == 'long':
@@ -185,6 +272,8 @@ class BinanceBtcFutureWeeklyHourTrade:
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
                                                              quantity, stop_price=pivot['s1'], reduce_only=True)
             assert stop_order_result
+            self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+            self.btc_trade_data['stop_order_data']['stop_order_quantity'] = quantity
             self.logger.info(f'Long position stop order result: {stop_order_result}')
 
             last_price = self.bfo.get_last_price(internal_symbol)
@@ -210,6 +299,8 @@ class BinanceBtcFutureWeeklyHourTrade:
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
                                                              quantity, stop_price=pivot['r1'], reduce_only=True)
             assert stop_order_result
+            self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
+            self.btc_trade_data['stop_order_data']['stop_order_quantity'] = quantity
             self.logger.info(f'Short position stop order result: {stop_order_result}')
 
             last_price = self.bfo.get_last_price(internal_symbol)
