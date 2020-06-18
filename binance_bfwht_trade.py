@@ -32,6 +32,8 @@ class BinanceBtcFutureWeeklyHourTrade:
                                'position_quantity': 0,
                                'pivot_timestamp': 0,
                                'prev_pivot': dict(),
+                               'switching_wait_timestamp': 0,
+                               'is_switching_delayed': False,
                                'stop_order_data': {'stop_order_location': 0,  # 0 is Pivot, 1 is SR1, 2 is SR2
                                                    'stop_order_id': 0,
                                                    'stop_order_quantity': 0,
@@ -88,7 +90,7 @@ class BinanceBtcFutureWeeklyHourTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 1, time_type='hour'):
+        if self.check_seconds('btc_trade', 4, time_type='hour'):
             self.future_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
@@ -114,6 +116,8 @@ class BinanceBtcFutureWeeklyHourTrade:
         ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '4h', limit=5)
         assert not ohlcv.empty
         prev_open = ohlcv.iloc[-2]['open']
+        prev_high = ohlcv.iloc[-2]['high']
+        prev_low = ohlcv.iloc[-2]['low']
         prev_close = ohlcv.iloc[-2]['close']
 
         prev_day = self.btc_trade_data['pivot_timestamp'] // self.daily_timestamp
@@ -145,6 +149,7 @@ class BinanceBtcFutureWeeklyHourTrade:
         self.manage_stop_price(pivot, prev_close)
 
         btc_status = self.btc_trade_data['btc_status']
+        is_switching_delayed = self.btc_trade_data['is_switching_delayed']
         if btc_status == 'init':
             if prev_close >= pivot['p'] >= prev_open:
                 self.reset_stop_order_data()
@@ -159,14 +164,25 @@ class BinanceBtcFutureWeeklyHourTrade:
                 assert self.bfo.close_position(internal_symbol)
         elif btc_status == 'long':
             if prev_close < pivot['p']:
-                self.reset_stop_order_data()
-                assert self.switch_position('short', pivot)
-                self.btc_trade_data['btc_status'] = 'short'
+                if is_switching_delayed:
+                    self.reset_stop_order_data()
+                    assert self.switch_position('short', pivot)
+                    self.btc_trade_data['btc_status'] = 'short'
+                    self.btc_trade_data['is_switching_delayed'] = False
+                else:
+                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
+                    self.btc_trade_data['is_switching_delayed'] = True
+                    self.check_is_trending_price_every_second('short', prev_low, pivot)
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                self.reset_stop_order_data()
-                assert self.switch_position('long', pivot)
-                self.btc_trade_data['btc_status'] = 'long'
+                if is_switching_delayed:
+                    self.reset_stop_order_data()
+                    assert self.switch_position('long', pivot)
+                    self.btc_trade_data['btc_status'] = 'long'
+                else:
+                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
+                    self.btc_trade_data['is_switching_delayed'] = True
+                    self.check_is_trending_price_every_second('long', prev_high, pivot)
 
         self.logger.info('Exit Future Trade')
 
@@ -243,6 +259,39 @@ class BinanceBtcFutureWeeklyHourTrade:
                 assert stop_order_result
                 self.logger.info(f'Changed short position stop order result: {stop_order_result}')
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
+
+    def check_is_trending_price_every_second(self, side, prev_price, pivot):
+        self.logger.info('Starts checking is last price over stop price every second.')
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        switching_wait_timestamp = self.btc_trade_data['switching_wait_timestamp']
+        quotient_hour = self.bfo.binance.seconds() // (self.hourly_timestamp * 4)
+        switching_wait_hour = switching_wait_timestamp // (self.hourly_timestamp * 4)
+
+        while quotient_hour != switching_wait_hour:
+            last_seconds = self.bfo.binance.seconds()
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+
+            if side == 'long' and last_price > prev_price:
+                self.logger.info('Last price is over previous high.')
+                self.reset_stop_order_data()
+                assert self.switch_position('long', pivot)
+                self.btc_trade_data['btc_status'] = 'long'
+                self.btc_trade_data['is_switching_delayed'] = False
+            if side == 'short' and last_price < prev_price:
+                self.logger.info('Last price is under previous low.')
+                self.reset_stop_order_data()
+                assert self.switch_position('short', pivot)
+                self.btc_trade_data['btc_status'] = 'short'
+                self.btc_trade_data['is_switching_delayed'] = False
+            else:
+                raise ValueError(f'Side{side} is not an valid side.')
+
+            while last_seconds != self.bfo.binance.seconds():
+                sleep(0.1)
+            quotient_hour = self.bfo.binance.seconds() // (self.hourly_timestamp * 4)
+            switching_wait_hour = switching_wait_timestamp // (self.hourly_timestamp * 4)
+            self.logger.info('Price is not trending. Skip this candle.')
 
     def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
         if side == 'long':
