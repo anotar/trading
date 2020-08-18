@@ -1,4 +1,4 @@
-from binance_bmt_trade import BinanceBtcMonthlyTrade
+from binance_bfht_trade import BinanceBtcFutureHourlyTrade
 from time import sleep
 import logging
 import os
@@ -20,23 +20,23 @@ def setup_logger(name):
     logger.addHandler(stream_handler)
 
     rotate_handler = handlers.TimedRotatingFileHandler(
-        filename=log_dir+name+'.log', when='W0', encoding='utf-8')
+        filename=log_dir+name+'.log', when='midnight', interval=1, encoding='utf-8')
     rotate_handler.setFormatter(formatter)
     logger.addHandler(rotate_handler)
 
     return logger
 
 
-logger = setup_logger('binance_bmt_main')
-logger.info('Set up Binance BTC Monthly Trading...')
+logger = setup_logger('binance_bfht_main')
+logger.info('Set up Binance BTC Future Hourly Trading...')
 
 with open('api/binance_ysjjdh_gmail.txt', 'r') as f:
     api_keys = f.readlines()
 api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-binanceBMT = BinanceBtcMonthlyTrade(api_test['api_key'], api_test['api_secret'])
+binanceBFWHT = BinanceBtcFutureHourlyTrade(api_test['api_key'], api_test['api_secret'])
 
-logger.info('Start Binance BTC Monthly Trading')
-binanceBMT.start_trade()
+logger.info('Start Binance BTC Future Hourly Trading')
+binanceBFWHT.start_trade()
 while True:
     sleep(10)
 

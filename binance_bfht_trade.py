@@ -10,11 +10,11 @@ from binance_future_order import BinanceFutureOrder
 from copy import deepcopy
 
 
-class BinanceBtcFutureDailyTrade:
+class BinanceBtcFutureHourlyTrade:
     def __init__(self, api_key, api_secret):
         # basic setup
-        self.logger = setup_logger('binance_bfdt_trade')
-        self.logger.info("Setting Binance BTC Future Daily Trading Module...")
+        self.logger = setup_logger('binance_bfht_trade')
+        self.logger.info("Setting Binance BTC Future Hourly Trading Module...")
         self.bfo = BinanceFutureOrder(api_key, api_secret)
 
         self.trade_loop_interval = 1  # seconds
@@ -32,6 +32,8 @@ class BinanceBtcFutureDailyTrade:
                                'position_quantity': 0,
                                'pivot_timestamp': 0,
                                'prev_pivot': dict(),
+                               'switching_wait_timestamp': 0,
+                               'is_switching_delayed': False,
                                'stop_order_data': {'stop_order_location': 0,  # 0 is Pivot, 1 is SR1, 2 is SR2
                                                    'stop_order_id': 0,
                                                    'stop_order_quantity': 0,
@@ -42,10 +44,10 @@ class BinanceBtcFutureDailyTrade:
         self.hourly_timestamp = 60 * 60
         self.daily_timestamp = 60 * 60 * 24
 
-        self.logger.info('Binance BTC Future Daily Trading Module Setup Completed')
+        self.logger.info('Binance BTC Future Hourly Trading Module Setup Completed')
 
     def start_trade(self):
-        self.logger.info('Setting up BFDT Trade Loop...')
+        self.logger.info('Setting up BFHT Trade Loop...')
         self.trade_loop_checker = True
 
         def trade_loop():
@@ -54,13 +56,13 @@ class BinanceBtcFutureDailyTrade:
                 try:
                     self.trade()
                 except Exception:
-                    self.logger.exception('Caught Error in BFDT Trade Loop')
+                    self.logger.exception('Caught Error in BFHT Trade Loop')
                 sleep(self.trade_loop_interval)
 
         self.trade_thread = threading.Thread(target=trade_loop)
         self.trade_thread.daemon = True
         self.trade_thread.start()
-        self.logger.info('Setup Completed. Start BFDT Trade Loop')
+        self.logger.info('Setup Completed. Start BFHT Trade Loop')
 
     def stop_trade(self):
         self.trade_loop_checker = False
@@ -71,7 +73,7 @@ class BinanceBtcFutureDailyTrade:
             max_try -= 1
         while self.trade_thread.is_alive():
             sleep(0.1)
-        self.logger.info('Successfully Stopped BFDT Trade Loop')
+        self.logger.info('Successfully Stopped BFHT Trade Loop')
 
     def check_seconds(self, dict_key, time, time_type='second', time_sync_offset=1):
         if time_type == 'minute':
@@ -88,10 +90,10 @@ class BinanceBtcFutureDailyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 1, time_type='hour'):
+        if self.check_seconds('btc_trade', 5, time_type='minute'):
             self.future_trade()
 
-        if self.check_seconds('record', 1, time_type='day'):
+        if self.check_seconds('record', 1, time_type='hour'):
             self.record_information()
 
     def future_trade(self):
@@ -101,7 +103,7 @@ class BinanceBtcFutureDailyTrade:
 
         symbol = self.btc_trade_data['base_symbol']
         internal_symbol = self.btc_trade_data['internal_symbol']
-        pivot = self.bfo.get_future_monthly_pivot(internal_symbol)
+        pivot = self.bfo.get_future_hourly_pivot(internal_symbol, hour=6)
         assert pivot
         self.logger.info(f'{symbol} Future Pivot: {pivot}')
         btc_info = self.bfo.get_future_ticker_info(internal_symbol)
@@ -111,13 +113,15 @@ class BinanceBtcFutureDailyTrade:
         if self.bfo.binance.seconds() - hourly_interval > btc_info['timestamp']:
             self.logger.info('Last Transaction is too long ago. Exit BTC trade')
             return False
-        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '1d', limit=5)
+        ohlcv = self.bfo.get_future_ohlcv(internal_symbol, '15m', limit=5)
         assert not ohlcv.empty
         prev_open = ohlcv.iloc[-2]['open']
+        prev_high = ohlcv.iloc[-2]['high']
+        prev_low = ohlcv.iloc[-2]['low']
         prev_close = ohlcv.iloc[-2]['close']
 
         prev_day = self.btc_trade_data['pivot_timestamp'] // self.daily_timestamp
-        delayed_day = (self.bfo.binance.seconds() - self.daily_timestamp) // self.daily_timestamp
+        delayed_day = (self.bfo.binance.seconds() - (self.minute_timestamp * 15)) // self.daily_timestamp
         prev_pivot = self.btc_trade_data['prev_pivot']
         if not prev_pivot:
             self.btc_trade_data['prev_pivot'] = pivot
@@ -125,26 +129,27 @@ class BinanceBtcFutureDailyTrade:
         elif prev_pivot['p'] != pivot['p']:
             if prev_day == delayed_day:
                 pivot = prev_pivot
-                self.logger.info('Current pivot is new pivot. Delay for a day')
+                self.logger.info('Current pivot is new pivot. Delay for 15 minutes')
             else:
                 self.btc_trade_data['prev_pivot'] = pivot
                 self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
-                self.logger.info('A day passed. Change to new pivot')
+                self.logger.info('15 minutes passed. Change to new pivot')
         else:
             self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
         if liquidation_timestamp:
-            quotient_day = self.bfo.binance.seconds() // self.daily_timestamp
-            liquidation_day = liquidation_timestamp // self.daily_timestamp
-            if quotient_day != liquidation_day:
+            quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 15)
+            liquidation_hour = liquidation_timestamp // (self.minute_timestamp * 15)
+            if quotient_hour != liquidation_hour:
                 self.btc_trade_data['btc_status'] = 'init'
                 self.btc_trade_data['liquidation_timestamp'] = 0
 
         self.manage_stop_price(pivot, prev_close)
 
         btc_status = self.btc_trade_data['btc_status']
+        is_switching_delayed = self.btc_trade_data['is_switching_delayed']
         if btc_status == 'init':
             if prev_close >= pivot['p'] >= prev_open:
                 self.reset_stop_order_data()
@@ -159,14 +164,25 @@ class BinanceBtcFutureDailyTrade:
                 assert self.bfo.close_position(internal_symbol)
         elif btc_status == 'long':
             if prev_close < pivot['p']:
-                self.reset_stop_order_data()
-                assert self.switch_position('short', pivot)
-                self.btc_trade_data['btc_status'] = 'short'
+                if is_switching_delayed:
+                    self.reset_stop_order_data()
+                    assert self.switch_position('short', pivot)
+                    self.btc_trade_data['btc_status'] = 'short'
+                    self.btc_trade_data['is_switching_delayed'] = False
+                else:
+                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
+                    self.btc_trade_data['is_switching_delayed'] = True
+                    self.check_is_trending_price_every_second('short', prev_low, pivot)
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                self.reset_stop_order_data()
-                assert self.switch_position('long', pivot)
-                self.btc_trade_data['btc_status'] = 'long'
+                if is_switching_delayed:
+                    self.reset_stop_order_data()
+                    assert self.switch_position('long', pivot)
+                    self.btc_trade_data['btc_status'] = 'long'
+                else:
+                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
+                    self.btc_trade_data['is_switching_delayed'] = True
+                    self.check_is_trending_price_every_second('long', prev_high, pivot)
 
         self.logger.info('Exit Future Trade')
 
@@ -175,7 +191,7 @@ class BinanceBtcFutureDailyTrade:
         self.btc_trade_data['stop_order_data']['stop_order_id'] = 0
         self.btc_trade_data['stop_order_data']['stop_order_quantity'] = 0
 
-    def manage_stop_price(self, pivot, prev_close):
+    def manage_stop_price(self, pivot, prev_close, stop_price_bias=0.05):
         internal_symbol = self.btc_trade_data['internal_symbol']
         stop_order_location = self.btc_trade_data['stop_order_data']['stop_order_location']
         btc_status = self.btc_trade_data['btc_status']
@@ -186,8 +202,9 @@ class BinanceBtcFutureDailyTrade:
             if stop_order_location is 0 and prev_close >= pivot['r1']:
                 self.logger.info('Move stop price to pivot P')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['p'] * (1 - stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['p'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -196,8 +213,9 @@ class BinanceBtcFutureDailyTrade:
             elif stop_order_location is 1 and prev_close >= pivot['r2']:
                 self.logger.info('Move stop price to pivot R1')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['r1'] * (1 - stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['r1'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -206,8 +224,9 @@ class BinanceBtcFutureDailyTrade:
             elif stop_order_location is 2 and prev_close >= pivot['r3']:
                 self.logger.info('Move stop price to pivot R2')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['r2'] * (1 - stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['r2'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.logger.info(f'Changed long position stop order result: {stop_order_result}')
@@ -217,8 +236,9 @@ class BinanceBtcFutureDailyTrade:
             if stop_order_location is 0 and prev_close <= pivot['s1']:
                 self.logger.info('Move stop price to pivot P')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['p'] * (1 + stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['p'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -227,8 +247,9 @@ class BinanceBtcFutureDailyTrade:
             elif stop_order_location is 1 and prev_close <= pivot['s2']:
                 self.logger.info('Move stop price to pivot S1')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['r1'] * (1 + stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['s1'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -237,15 +258,49 @@ class BinanceBtcFutureDailyTrade:
             elif stop_order_location is 2 and prev_close <= pivot['s3']:
                 self.logger.info('Move stop price to pivot S2')
                 assert self.bfo.cancel_future_order(internal_symbol, stop_order_id)
+                biased_stop_price = pivot['r2'] * (1 + stop_price_bias)
                 stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
-                                                                 stop_order_quantity, stop_price=pivot['s2'],
+                                                                 stop_order_quantity, stop_price=biased_stop_price,
                                                                  reduce_only=True)
                 assert stop_order_result
                 self.logger.info(f'Changed short position stop order result: {stop_order_result}')
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
 
+    def check_is_trending_price_every_second(self, side, prev_price, pivot):
+        self.logger.info('Starts checking is last price over stop price every second.')
+        internal_symbol = self.btc_trade_data['internal_symbol']
+        switching_wait_timestamp = self.btc_trade_data['switching_wait_timestamp']
+        quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 15)
+        switching_wait_hour = switching_wait_timestamp // (self.minute_timestamp * 15)
 
-    def switch_position(self, side, pivot, position_by_balance=0.7, profit_order_ratio=0.5, price_outer_ratio=0.14):
+        while quotient_hour != switching_wait_hour:
+            last_seconds = self.bfo.binance.seconds()
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+
+            if side == 'long' and last_price > prev_price:
+                self.logger.info('Last price is over previous high.')
+                self.reset_stop_order_data()
+                assert self.switch_position('long', pivot)
+                self.btc_trade_data['btc_status'] = 'long'
+                self.btc_trade_data['is_switching_delayed'] = False
+            if side == 'short' and last_price < prev_price:
+                self.logger.info('Last price is under previous low.')
+                self.reset_stop_order_data()
+                assert self.switch_position('short', pivot)
+                self.btc_trade_data['btc_status'] = 'short'
+                self.btc_trade_data['is_switching_delayed'] = False
+            else:
+                raise ValueError(f'Side{side} is not an valid side.')
+
+            while last_seconds != self.bfo.binance.seconds():
+                sleep(0.1)
+            quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 15)
+            switching_wait_hour = switching_wait_timestamp // (self.minute_timestamp * 15)
+            self.logger.info('Price is not trending. Skip this candle.')
+
+    def switch_position(self, side, pivot, position_size_ratio=0.8, profit_order_ratio=0.5, price_outer_ratio=0.14,
+                        stop_price_bias=0.05):
         if side == 'long':
             sr2 = pivot['s2']
         else:
@@ -257,7 +312,9 @@ class BinanceBtcFutureDailyTrade:
         assert last_price
         balance = self.bfo.get_future_balance()
         assert balance
-        balance *= position_by_balance
+        balance = 10 ** int(len(str(int(balance)))) / 10 * position_size_ratio
+        assert balance
+
         leverage, quantity = self.bfo.sr2_liquidation_calculator(last_price, sr2, balance, side)
         limit_quantity = quantity * profit_order_ratio
         self.btc_trade_data['leverage'] = leverage
@@ -270,8 +327,9 @@ class BinanceBtcFutureDailyTrade:
             assert market_order_result
             self.logger.info(f'Long position market order result: {market_order_result}')
 
-            stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market',
-                                                             quantity, stop_price=pivot['s1'], reduce_only=True)
+            stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market', quantity,
+                                                             stop_price=pivot['s1']*(1-stop_price_bias),
+                                                             reduce_only=True)
             assert stop_order_result
             self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
             self.btc_trade_data['stop_order_data']['stop_order_quantity'] = quantity
@@ -297,8 +355,9 @@ class BinanceBtcFutureDailyTrade:
             assert market_order_result
             self.logger.info(f'Short position market order result: {market_order_result}')
 
-            stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market',
-                                                             quantity, stop_price=pivot['r1'], reduce_only=True)
+            stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market', quantity,
+                                                             stop_price=pivot['r1']*(1+stop_price_bias),
+                                                             reduce_only=True)
             assert stop_order_result
             self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
             self.btc_trade_data['stop_order_data']['stop_order_quantity'] = quantity
@@ -354,7 +413,7 @@ class BinanceBtcFutureDailyTrade:
 
         # save balance data
         file_name = 'bot_data_history'
-        record_dir = 'data/Binance/BtcFutureDailyTrading/'
+        record_dir = 'data/Binance/BtcFutureHourlyTrading/'
         if not os.path.exists(record_dir):
             os.makedirs(record_dir)
         bot_data = pd.DataFrame()
@@ -390,15 +449,15 @@ def setup_logger(name):
 
 
 if __name__ == '__main__':
-    with open('api/binance_ysjjah_gmail.txt', 'r') as f:
+    with open('api/binance_ysjjdh_gmail.txt', 'r') as f:
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
-    binanceBFDT = BinanceBtcFutureDailyTrade(api_test['api_key'], api_test['api_secret'])
+    binanceBFHT = BinanceBtcFutureHourlyTrade(api_test['api_key'], api_test['api_secret'])
 
     print('start trade')
-    binanceBFDT.start_trade()
+    binanceBFHT.start_trade()
     while True:
         sleep(100)
     print('stop trade')
-    binanceBFDT.stop_trade()
+    binanceBFHT.stop_trade()
 
