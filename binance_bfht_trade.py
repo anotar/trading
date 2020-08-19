@@ -30,8 +30,6 @@ class BinanceBtcFutureHourlyTrade:
                                'liquidation_timestamp': 0,
                                'leverage': 0,
                                'position_quantity': 0,
-                               'pivot_timestamp': 0,
-                               'prev_pivot': dict(),
                                'switching_wait_timestamp': 0,
                                'is_switching_delayed': False,
                                'stop_order_data': {'stop_order_location': 0,  # 0 is Pivot, 1 is SR1, 2 is SR2
@@ -90,7 +88,7 @@ class BinanceBtcFutureHourlyTrade:
             return False
 
     def trade(self):
-        if self.check_seconds('btc_trade', 5, time_type='minute'):
+        if self.check_seconds('btc_trade', 15, time_type='minute'):
             self.future_trade()
 
         if self.check_seconds('record', 1, time_type='hour'):
@@ -119,23 +117,6 @@ class BinanceBtcFutureHourlyTrade:
         prev_high = ohlcv.iloc[-2]['high']
         prev_low = ohlcv.iloc[-2]['low']
         prev_close = ohlcv.iloc[-2]['close']
-
-        prev_day = self.btc_trade_data['pivot_timestamp'] // self.daily_timestamp
-        delayed_day = (self.bfo.binance.seconds() - (self.minute_timestamp * 15)) // self.daily_timestamp
-        prev_pivot = self.btc_trade_data['prev_pivot']
-        if not prev_pivot:
-            self.btc_trade_data['prev_pivot'] = pivot
-            self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
-        elif prev_pivot['p'] != pivot['p']:
-            if prev_day == delayed_day:
-                pivot = prev_pivot
-                self.logger.info('Current pivot is new pivot. Delay for 15 minutes')
-            else:
-                self.btc_trade_data['prev_pivot'] = pivot
-                self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
-                self.logger.info('15 minutes passed. Change to new pivot')
-        else:
-            self.btc_trade_data['pivot_timestamp'] = ohlcv.iloc[-1]['timestamp']
 
         assert self.check_liquidation()
         liquidation_timestamp = self.btc_trade_data['liquidation_timestamp']
