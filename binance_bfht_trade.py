@@ -30,8 +30,6 @@ class BinanceBtcFutureHourlyTrade:
                                'liquidation_timestamp': 0,
                                'leverage': 0,
                                'position_quantity': 0,
-                               'switching_wait_timestamp': 0,
-                               'is_switching_delayed': False,
                                'stop_order_data': {'stop_order_location': 0,  # 0 is Pivot, 1 is SR1, 2 is SR2
                                                    'stop_order_id': 0,
                                                    'stop_order_quantity': 0,
@@ -130,7 +128,6 @@ class BinanceBtcFutureHourlyTrade:
         self.manage_stop_price(pivot, prev_close)
 
         btc_status = self.btc_trade_data['btc_status']
-        is_switching_delayed = self.btc_trade_data['is_switching_delayed']
         if btc_status == 'init':
             if prev_close >= pivot['p'] >= prev_open:
                 self.reset_stop_order_data()
@@ -145,25 +142,15 @@ class BinanceBtcFutureHourlyTrade:
                 assert self.bfo.close_position(internal_symbol)
         elif btc_status == 'long':
             if prev_close < pivot['p']:
-                if is_switching_delayed:
-                    self.reset_stop_order_data()
-                    assert self.switch_position('short', pivot)
-                    self.btc_trade_data['btc_status'] = 'short'
-                    self.btc_trade_data['is_switching_delayed'] = False
-                else:
-                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
-                    self.btc_trade_data['is_switching_delayed'] = True
-                    self.check_is_trending_price_every_second('short', prev_low, pivot)
+                self.reset_stop_order_data()
+                assert self.switch_position('short', pivot)
+                self.btc_trade_data['btc_status'] = 'short'
+                self.btc_trade_data['is_switching_delayed'] = False
         elif btc_status == 'short':
             if prev_close > pivot['p']:
-                if is_switching_delayed:
-                    self.reset_stop_order_data()
-                    assert self.switch_position('long', pivot)
-                    self.btc_trade_data['btc_status'] = 'long'
-                else:
-                    self.btc_trade_data['switching_wait_timestamp'] = self.bfo.binance.seconds()
-                    self.btc_trade_data['is_switching_delayed'] = True
-                    self.check_is_trending_price_every_second('long', prev_high, pivot)
+                self.reset_stop_order_data()
+                assert self.switch_position('long', pivot)
+                self.btc_trade_data['btc_status'] = 'long'
 
         self.logger.info('Exit Future Trade')
 
@@ -247,45 +234,7 @@ class BinanceBtcFutureHourlyTrade:
                 self.logger.info(f'Changed short position stop order result: {stop_order_result}')
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
 
-    def check_is_trending_price_every_second(self, side, prev_price, pivot):
-        self.logger.info('Starts checking is last price over stop price every second.')
-        internal_symbol = self.btc_trade_data['internal_symbol']
-        switching_wait_timestamp = self.btc_trade_data['switching_wait_timestamp']
-        quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 15)
-        switching_wait_hour = switching_wait_timestamp // (self.minute_timestamp * 15)
-
-        while quotient_hour != switching_wait_hour:
-            last_seconds = self.bfo.binance.seconds()
-            last_price = self.bfo.get_last_price(internal_symbol)
-            assert last_price
-
-            if side == 'long' and last_price > prev_price:
-                self.logger.info('Last price is over previous high.')
-                self.reset_stop_order_data()
-                assert self.switch_position('long', pivot)
-                self.btc_trade_data['btc_status'] = 'long'
-                self.btc_trade_data['is_switching_delayed'] = False
-            if side == 'short' and last_price < prev_price:
-                self.logger.info('Last price is under previous low.')
-                self.reset_stop_order_data()
-                assert self.switch_position('short', pivot)
-                self.btc_trade_data['btc_status'] = 'short'
-                self.btc_trade_data['is_switching_delayed'] = False
-            else:
-                raise ValueError(f'Side{side} is not an valid side.')
-
-            while last_seconds != self.bfo.binance.seconds():
-                sleep(0.1)
-            quotient_hour = self.bfo.binance.seconds() // (self.minute_timestamp * 15)
-            switching_wait_hour = switching_wait_timestamp // (self.minute_timestamp * 15)
-            self.logger.info('Price is not trending. Skip this candle.')
-
-    def switch_position(self, side, pivot, position_size_ratio=0.8, profit_order_ratio=0.5, price_outer_ratio=0.14,
-                        stop_price_bias=0.05):
-        if side == 'long':
-            sr2 = pivot['s2']
-        else:
-            sr2 = pivot['r2']
+    def switch_position(self, side, pivot, position_size_ratio=0.5, profit_order_ratio=0.5, stop_price_bias=0.05):
         internal_symbol = self.btc_trade_data['internal_symbol']
         assert self.bfo.cancel_all_future_order(internal_symbol)
         assert self.bfo.close_position(internal_symbol)
@@ -295,6 +244,21 @@ class BinanceBtcFutureHourlyTrade:
         assert balance
         balance = 10 ** int(len(str(int(balance)))) / 10 * position_size_ratio
         assert balance
+
+        if side == 'long':
+            if last_price < pivot['r1']:
+                sr2 = pivot['s2']
+            elif last_price < pivot['r2']:
+                sr2 = pivot['s1']
+            else:
+                sr2 = pivot['p']
+        else:
+            if last_price > pivot['s1']:
+                sr2 = pivot['r2']
+            elif last_price > pivot['s2']:
+                sr2 = pivot['r1']
+            else:
+                sr2 = pivot['p']
 
         leverage, quantity = self.bfo.sr2_liquidation_calculator(last_price, sr2, balance, side)
         limit_quantity = quantity * profit_order_ratio
@@ -308,8 +272,21 @@ class BinanceBtcFutureHourlyTrade:
             assert market_order_result
             self.logger.info(f'Long position market order result: {market_order_result}')
 
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+            if last_price < pivot['r1']:
+                stop_price = pivot['s1']
+            elif last_price < pivot['r2']:
+                stop_price = pivot['p']
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 1
+            elif last_price < pivot['r3']:
+                stop_price = pivot['r1`']
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 2
+            else:
+                stop_price = last_price - abs(last_price - pivot['p']) * 0.3
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'stop_market', quantity,
-                                                             stop_price=pivot['s1']*(1-stop_price_bias),
+                                                             stop_price=stop_price*(1-stop_price_bias),
                                                              reduce_only=True)
             assert stop_order_result
             self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -318,15 +295,14 @@ class BinanceBtcFutureHourlyTrade:
 
             last_price = self.bfo.get_last_price(internal_symbol)
             assert last_price
-            limit_price = 0
             if last_price < pivot['r1']:
                 limit_price = pivot['r1']
             elif last_price < pivot['r2']:
                 limit_price = pivot['r2']
             elif last_price < pivot['r3']:
                 limit_price = pivot['r3']
-            if not limit_price or limit_price > (last_price * (1 + price_outer_ratio)):
-                limit_price = last_price * (1 + price_outer_ratio)
+            else:
+                limit_price = last_price + abs(last_price - pivot['p']) * 0.3
             limit_order_result = self.bfo.create_future_order(internal_symbol, 'sell', 'limit',
                                                               limit_quantity, price=limit_price, reduce_only=True)
             assert limit_order_result
@@ -336,8 +312,21 @@ class BinanceBtcFutureHourlyTrade:
             assert market_order_result
             self.logger.info(f'Short position market order result: {market_order_result}')
 
+            last_price = self.bfo.get_last_price(internal_symbol)
+            assert last_price
+            if last_price > pivot['s1']:
+                stop_price = pivot['r1']
+            elif last_price < pivot['s2']:
+                stop_price = pivot['p']
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 1
+            elif last_price < pivot['s3']:
+                stop_price = pivot['s1']
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = 2
+            else:
+                stop_price = last_price + abs(last_price - pivot['p']) * 0.3
+                self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
             stop_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'stop_market', quantity,
-                                                             stop_price=pivot['r1']*(1+stop_price_bias),
+                                                             stop_price=stop_price*(1+stop_price_bias),
                                                              reduce_only=True)
             assert stop_order_result
             self.btc_trade_data['stop_order_data']['stop_order_id'] = stop_order_result['orderId']
@@ -346,15 +335,14 @@ class BinanceBtcFutureHourlyTrade:
 
             last_price = self.bfo.get_last_price(internal_symbol)
             assert last_price
-            limit_price = 0
             if last_price > pivot['s1']:
                 limit_price = pivot['s1']
             elif last_price > pivot['s2']:
                 limit_price = pivot['s2']
             elif last_price > pivot['s3']:
                 limit_price = pivot['s3']
-            if not limit_price or limit_price < (last_price * (1 - price_outer_ratio)):
-                limit_price = last_price * (1 - price_outer_ratio)
+            else:
+                limit_price = last_price - abs(last_price - pivot['p']) * 0.3
             limit_order_result = self.bfo.create_future_order(internal_symbol, 'buy', 'limit',
                                                               limit_quantity, price=limit_price, reduce_only=True)
             assert limit_order_result
