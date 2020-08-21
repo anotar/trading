@@ -159,7 +159,7 @@ class BinanceBtcFutureHourlyTrade:
         self.btc_trade_data['stop_order_data']['stop_order_id'] = 0
         self.btc_trade_data['stop_order_data']['stop_order_quantity'] = 0
 
-    def manage_stop_price(self, pivot, prev_close, stop_price_bias=0.05):
+    def manage_stop_price(self, pivot, prev_close, stop_price_bias=0.0005):
         internal_symbol = self.btc_trade_data['internal_symbol']
         stop_order_location = self.btc_trade_data['stop_order_data']['stop_order_location']
         btc_status = self.btc_trade_data['btc_status']
@@ -234,7 +234,7 @@ class BinanceBtcFutureHourlyTrade:
                 self.logger.info(f'Changed short position stop order result: {stop_order_result}')
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = -1
 
-    def switch_position(self, side, pivot, position_size_ratio=0.5, profit_order_ratio=0.5, stop_price_bias=0.05):
+    def switch_position(self, side, pivot, position_size_ratio=0.5, profit_order_ratio=0.5, stop_price_bias=0.0005):
         internal_symbol = self.btc_trade_data['internal_symbol']
         assert self.bfo.cancel_all_future_order(internal_symbol)
         assert self.bfo.close_position(internal_symbol)
@@ -316,10 +316,10 @@ class BinanceBtcFutureHourlyTrade:
             assert last_price
             if last_price > pivot['s1']:
                 stop_price = pivot['r1']
-            elif last_price < pivot['s2']:
+            elif last_price > pivot['s2']:
                 stop_price = pivot['p']
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = 1
-            elif last_price < pivot['s3']:
+            elif last_price > pivot['s3']:
                 stop_price = pivot['s1']
                 self.btc_trade_data['stop_order_data']['stop_order_location'] = 2
             else:
