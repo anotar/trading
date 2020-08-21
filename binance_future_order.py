@@ -317,7 +317,7 @@ class BinanceFutureOrder(BinanceOrder):
         precise_price = round(((price // tick_size) * tick_size), 8)
         return precise_price
 
-    def close_position(self, internal_symbol):
+    def close_position(self, internal_symbol, amount_bias=1.1):
         self.logger.info('Close current position')
         position_info = self.get_position_information(internal_symbol)
         assert position_info
@@ -327,9 +327,11 @@ class BinanceFutureOrder(BinanceOrder):
             return True
         order_result = dict()
         if position_amount > 0:
-            order_result = self.create_future_order(internal_symbol, 'sell', 'market', abs(position_amount))
+            order_result = self.create_future_order(internal_symbol, 'sell', 'market',
+                                                    abs(position_amount) * amount_bias, reduce_only=True)
         else:
-            order_result = self.create_future_order(internal_symbol, 'buy', 'market', abs(position_amount))
+            order_result = self.create_future_order(internal_symbol, 'buy', 'market',
+                                                    abs(position_amount) * amount_bias, reduce_only=True)
         assert order_result
         self.logger.info(f'Close position order result: {order_result}')
         return True
