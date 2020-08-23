@@ -32,7 +32,7 @@ class BinanceAltDailyTrade:
 
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
                                'base_pair': 'init',  # 'BTC' or 'USDT'
-                               'max_trade_lim it': 3,
+                               'max_trade_limit': 3,
                                'trading_alts': {},  # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
                                                      's1_quantity': 0,
@@ -214,6 +214,7 @@ class BinanceAltDailyTrade:
             assert balance not in self.bo.error_list
             usdt_balance += balance
             max_trade_limit = int(usdt_balance // min_cost)
+            max_trade_limit = 10 if max_trade_limit > 10 else max_trade_limit
             self.alt_trade_data['max_trade_limit'] = max_trade_limit
             self.logger.info(f'Change max trade limit to {max_trade_limit}')
 
