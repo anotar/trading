@@ -32,7 +32,7 @@ class BinanceAltDailyTrade:
 
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
                                'base_pair': 'init',  # 'BTC' or 'USDT'
-                               'max_trade_limit': 3,
+                               'max_trade_lim it': 3,
                                'trading_alts': {},  # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
                                                      's1_quantity': 0,
@@ -200,6 +200,7 @@ class BinanceAltDailyTrade:
         else:
             self.logger.info('There is no trading alts')
 
+        # TODO: to be revised in future -> change max trade limit more efficiently
         if not self.alt_trade_data['trading_alts']:
             assert self.bo.update_ticker_data()
             ticker_info = self.bo.get_ticker_statistics('BTC/USDT', data_update=False)
@@ -277,9 +278,9 @@ class BinanceAltDailyTrade:
             ohlcv = self.bo.get_ohlcv(ticker, '1d', limit=5)
             assert not ohlcv.empty
             prev_close = ohlcv.iloc[-2]['close']
-            prev_open = ohlcv.iloc[-2]['open']
+            penultimate_close = ohlcv.iloc[-3]['close'] = ohlcv.iloc[-3]['close']
             last_price = ticker_info['last_price']
-            if prev_open < pivot['p'] <= prev_close:
+            if penultimate_close < pivot['p'] <= prev_close:
                 buy_triggered_ticker_list.append(ticker)
             if last_price < pivot['p']:
                 under_pivot_p_ticker_list.append(ticker)
@@ -306,10 +307,10 @@ class BinanceAltDailyTrade:
     def cancel_trading_alt_orders(self, trading_alt):
         self.logger.info(f'{trading_alt}: Cancel open orders')
         trading_alt_stat = self.alt_trade_data['trading_alts'][trading_alt]
-        assert self.bo.update_open_order_data() not in self.bo.error_list
         if trading_alt_stat['stop_order_id']:
             stop_order_id = trading_alt_stat['stop_order_id']
-            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            stop_order_info = self.bo.get_open_order_info(stop_order_id)
+            assert stop_order_info not in self.bo.error_list
             if stop_order_info:
                 self.logger.info(f'{trading_alt}: Cancel s1 stop order')
                 assert self.bo.cancel_order(trading_alt, stop_order_id)
@@ -317,7 +318,8 @@ class BinanceAltDailyTrade:
         r3_order = trading_alt_stat['r3_order']
         if r3_order['order_list_id']:
             stop_order_id = r3_order['stop_order_id']
-            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            stop_order_info = self.bo.get_open_order_info(stop_order_id)
+            assert stop_order_info not in self.bo.error_list
             is_stop_order_canceled = False
             if stop_order_info:
                 self.logger.info(f'{trading_alt}: Cancel r3 stop order')
@@ -325,7 +327,7 @@ class BinanceAltDailyTrade:
                 is_stop_order_canceled = True
 
             limit_order_id = r3_order['limit_order_id']
-            limit_order_info = self.bo.get_open_order_info(limit_order_id, data_update=False)
+            limit_order_info = self.bo.get_open_order_info(limit_order_id)
             assert limit_order_info not in self.bo.error_list
             if limit_order_info and not is_stop_order_canceled:
                 self.logger.info(f'{trading_alt}: Cancel r3 limit order')
@@ -336,7 +338,8 @@ class BinanceAltDailyTrade:
         r2_order = trading_alt_stat['r2_order']
         if r2_order['order_list_id']:
             stop_order_id = r2_order['stop_order_id']
-            stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
+            stop_order_info = self.bo.get_open_order_info(stop_order_id)
+            assert stop_order_info not in self.bo.error_list
             is_stop_order_canceled = False
             if stop_order_info:
                 self.logger.info(f'{trading_alt}: Cancel r2 stop order')
@@ -344,7 +347,7 @@ class BinanceAltDailyTrade:
                 is_stop_order_canceled = True
 
             limit_order_id = r2_order['limit_order_id']
-            limit_order_info = self.bo.get_open_order_info(r2_order['limit_order_id'], data_update=False)
+            limit_order_info = self.bo.get_open_order_info(r2_order['limit_order_id'])
             assert limit_order_info not in self.bo.error_list
             if limit_order_info and not is_stop_order_canceled:
                 self.logger.info(f'{trading_alt}: Cancel r2 limit order')
