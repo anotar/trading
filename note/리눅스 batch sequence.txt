@@ -1,0 +1,3 @@
+cd trading
+source trading_venv/bin/activate
+nohup python binance_bfht_main.py &
