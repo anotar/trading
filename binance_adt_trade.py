@@ -111,8 +111,11 @@ class BinanceAltDailyTrade:
             return False
 
     def trade(self):
+
         if self.check_seconds('btc_trade', 1, time_type='day'):
-            self.btc_trade()
+            self.btc_trade_data['btc_status'] = 'sell'
+            # USDT pair trading only
+            # self.btc_trade()
 
         if self.check_seconds('alt_trade', 1, time_type='hour'):
             self.alt_trade()
@@ -200,7 +203,6 @@ class BinanceAltDailyTrade:
         else:
             self.logger.info('There is no trading alts')
 
-        # TODO: to be revised in future -> change max trade limit more efficiently
         if not self.alt_trade_data['trading_alts']:
             assert self.bo.update_ticker_data()
             ticker_info = self.bo.get_ticker_statistics('BTC/USDT', data_update=False)
