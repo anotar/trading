@@ -571,7 +571,7 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
-    # bo.show_basic_info()
+    bo.show_basic_info()
     # bo.show_basic_market_info()
 
     # Test function
@@ -579,7 +579,7 @@ if __name__ == '__main__':
     # print('BTC/USDT ticker Status:', bo.check_ticker_status('BTC/USDT'))
     # print('BTC yearly Pivot:', bo.get_yearly_pivot('BTC/USDT'))
     # print('BTC monthly Pivot:', bo.get_monthly_pivot('BTC/USDT'))
-    pprint(bo.get_ticker_info('LTC/BTC'))
+    # pprint(bo.get_ticker_info('LTC/BTC'))
     # pprint(bo.get_open_orders())
     # print(bo.get_open_orders_info())
     # bo.get_order_stat(842733901, 'BTC/USDT')
