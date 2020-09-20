@@ -277,6 +277,7 @@ class BinanceOrder:
             open_orders = self.get_open_orders()
             if open_orders in self.error_list:
                 return open_orders
+            self.open_order_data = open_orders
             if not open_orders:
                 return False
         else:
