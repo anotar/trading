@@ -51,7 +51,7 @@ class BinanceAltDailyTrade:
                                                      },
                                                      },
                                'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS'],
-                               'option_list': ['BULL', 'BEAR'],
+                               'option_list': ['BULL', 'BEAR', 'UP', 'DOWN'],
                                'btc_pair_condition': {'min_volume': 100,
                                                       'min_price': 0.00000040,
                                                       },
