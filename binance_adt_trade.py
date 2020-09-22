@@ -310,7 +310,7 @@ class BinanceAltDailyTrade:
     def cancel_trading_alt_orders(self, trading_alt):
         self.logger.info(f'{trading_alt}: Cancel open orders')
         trading_alt_stat = self.alt_trade_data['trading_alts'][trading_alt]
-        assert self.bo.update_open_order_data()
+        assert self.bo.update_open_order_data() not in self.bo.error_list
         if trading_alt_stat['stop_order_id']:
             stop_order_id = trading_alt_stat['stop_order_id']
             stop_order_info = self.bo.get_open_order_info(stop_order_id, data_update=False)
