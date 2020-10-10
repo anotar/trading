@@ -1,3 +1,6 @@
+# Trending based trading system
+# Made by Jusang Kim from 2020.10.10
+
 import logging
 import threading
 from time import sleep
@@ -20,18 +23,12 @@ class BinanceAltDailyTrade:
         self.trade_loop_interval = 1  # seconds
         self.trade_loop_checker = True
         self.trade_thread = threading.Thread()
-        self.trade_loop_prev_time = {'btc_trade': 0,
-                                     'alt_trade': 0,
+        self.trade_loop_prev_time = {'alt_trade': 0,
                                      'record': 0,
                                      }
 
-        self.btc_trade_data = {'btc_status': 'init',  # 'buy' or 'sell'
-                               'base_symbol': 'BTC/USDT',
-                               'initial_pivot': -666,
-                               }
-
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
-                               'base_pair': 'init',  # 'BTC' or 'USDT'
+                               'base_pair': 'USDT',
                                'max_trade_limit': 3,
                                'trading_alts': {},  # {ticker: trading_alts_stat,}
                                'trading_alts_stat': {'total_quantity': 0,
@@ -50,7 +47,7 @@ class BinanceAltDailyTrade:
                                                          'stop_order_id': 0,
                                                      },
                                                      },
-                               'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS'],
+                               'stable_list': ['USDT', 'BUSD', 'PAX', 'TUSD', 'USDC', 'NGN', 'USDS', 'EUR'],
                                'option_list': ['BULL', 'BEAR', 'UP', 'DOWN'],
                                'btc_pair_condition': {'min_volume': 100,
                                                       'min_price': 0.00000040,
@@ -111,89 +108,20 @@ class BinanceAltDailyTrade:
             return False
 
     def trade(self):
-
-        if self.check_seconds('btc_trade', 1, time_type='day'):
-            self.btc_trade_data['btc_status'] = 'sell'
-            # USDT pair trading only
-            # self.btc_trade()
-
         if self.check_seconds('alt_trade', 1, time_type='hour'):
             self.alt_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
 
-    def btc_trade(self):
-        self.logger.info('Starting BTC Trade...')
-        if not self.bo.check_exchange_status():
-            self.logger.info('Exchange is Not Active. Exit BTC trade')
-
-        symbol = self.btc_trade_data['base_symbol']
-        pivot = self.bo.get_yearly_pivot(symbol)
-        assert pivot
-        self.logger.info(f'{symbol} Pivot: {pivot}')
-        btc_info = self.bo.get_ticker_info(symbol)
-        assert btc_info
-        last_price = btc_info['last_price']
-        hourly_interval = 3600
-        if self.bo.binance.seconds() - hourly_interval > btc_info['timestamp']:
-            self.logger.info('Last Transaction is too long ago. Exit BTC trade')
-            return False
-        ohlcv = self.bo.get_ohlcv(symbol, '1M', limit=5)
-        assert not ohlcv.empty
-        prev_close = ohlcv.iloc[-2]['close']
-        curr_low = ohlcv.iloc[-1]['low']
-
-        btc_status = self.btc_trade_data['btc_status']
-        self.logger.info(f'Current btc status is \'{btc_status}\'')
-        if last_price < self.btc_trade_data['initial_pivot']:
-            self.logger.info(f'{symbol}: Last Price is under Initial Pivot P')
-            if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: start sell BTC procedure')
-                self.sell_all_btc()
-                self.btc_trade_data['btc_status'] = 'sell'
-                self.logger.info('Change btc status to \'sell\'')
-                self.btc_trade_data['initial_pivot'] = -666
-                self.logger.info('Initialize initial_pivot')
-
-        elif prev_close < pivot['p']:
-            self.logger.info(f'{symbol}: Previous monthly close price is under Pivot P')
-            if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: Start sell BTC procedure')
-                self.sell_all_btc()
-                self.logger.info('Update previous month status')
-                self.btc_trade_data['btc_status'] = 'sell'
-                self.logger.info('Change btc status to \'sell\'')
-                self.btc_trade_data['initial_pivot'] = -666
-                self.logger.info('Initialize initial_pivot')
-
-        elif curr_low >= pivot['p']:
-            self.logger.info(f'{symbol}: Previous monthly close price and Current Low price are more than Pivot P')
-            if self.btc_trade_data['btc_status'] != 'buy':
-                self.logger.info(f'{symbol}: start buy BTC procedure')
-                self.buy_all_btc()
-                self.btc_trade_data['btc_status'] = 'buy'
-                self.logger.info('Change btc status to \'buy\'')
-                self.btc_trade_data['initial_pivot'] = pivot['p']
-                self.logger.info('Change initial_pivot to {}'.format(self.btc_trade_data['initial_pivot']))
-
-        elif self.btc_trade_data['btc_status'] == 'init':
-            self.logger.info(f'{symbol}: Current Low is under Pivot P and btc status is \'init\'')
-            if self.btc_trade_data['btc_status'] != 'sell':
-                self.logger.info(f'{symbol}: start sell BTC procedure')
-                self.sell_all_btc()
-                self.btc_trade_data['btc_status'] = 'sell'
-                self.logger.info('Change btc status to \'sell\'')
-
-        self.logger.info('Exit BTC Trade')
-
-    def alt_trade(self, min_cost=100):
+    def alt_trade(self, min_cost=150):
         self.logger.info('Starting Alt Trade...')
+        max_trade_limit = self.alt_trade_data['max_trade_limit']
+        self.logger.info(f'Current Max Trading Limit is {max_trade_limit}')
         if not self.bo.check_exchange_status():
             self.logger.info('Exchange is Not Active. Exit Alt trade')
 
         self.check_trading_alts()
-        btc_status = self.btc_trade_data['btc_status']
         base_pair = self.alt_trade_data['base_pair']
         self.logger.info(f'Current alt base pair is \'{base_pair}\'')
 
@@ -209,30 +137,16 @@ class BinanceAltDailyTrade:
             assert ticker_info
             btc_price = ticker_info['last_price']
             usdt_balance = 0
-            balance = self.bo.get_balance('BTC')
+            balance = self.bo.get_balance(symbol='BTC')
             assert balance not in self.bo.error_list
             usdt_balance += balance * btc_price
-            balance = self.bo.get_balance('USDT')
+            balance = self.bo.get_balance(symbol='USDT')
             assert balance not in self.bo.error_list
             usdt_balance += balance
             max_trade_limit = int(usdt_balance // min_cost)
             max_trade_limit = 10 if max_trade_limit > 10 else max_trade_limit
             self.alt_trade_data['max_trade_limit'] = max_trade_limit
             self.logger.info(f'Change max trade limit to {max_trade_limit}')
-
-        if btc_status == 'buy' and base_pair != 'BTC':
-            self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
-            self.check_trading_alts()
-            self.sell_invalid_alts()
-            self.logger.info('Change ALT/pair to BTC')
-            self.alt_trade_data['base_pair'] = 'BTC'
-
-        elif btc_status == 'sell' and base_pair != 'USDT':
-            self.logger.info(f'BTC status has been changed to \'{btc_status}\'')
-            self.check_trading_alts()
-            self.sell_invalid_alts()
-            self.logger.info('Change ALT/pair to USDT')
-            self.alt_trade_data['base_pair'] = 'USDT'
 
         if len(trading_alts) <= self.alt_trade_data['max_trade_limit']:
             self.make_pivot_order()
@@ -242,16 +156,6 @@ class BinanceAltDailyTrade:
             self.manage_trading_alts()
 
         self.logger.info('Exit Alt Trade')
-
-    def sell_all_btc(self):
-        self.logger.info('Sell All BTC')
-        symbol = self.btc_trade_data['base_symbol']
-        assert self.bo.sell_at_market(symbol) not in self.bo.error_list
-
-    def buy_all_btc(self, slip_rate=0.995):
-        self.logger.info('Buy All BTC')
-        symbol = self.btc_trade_data['base_symbol']
-        assert self.bo.buy_at_market(symbol) not in self.bo.error_list
 
     def make_pivot_order(self):
         self.logger.info('Start making pivot order sequence...')
@@ -290,17 +194,26 @@ class BinanceAltDailyTrade:
         self.logger.info(f'Buy triggered ticker count: {len(buy_triggered_ticker_list)}')
         self.logger.info(f'Under pivot p ticker ratio: {len(under_pivot_p_ticker_list)}/{len(valid_ticker_list)}')
 
+        trade_count = 0
         if buy_triggered_ticker_list:
             self.logger.info('Buy under pivot ticker at market')
             for ticker in buy_triggered_ticker_list:
-                pair_balance = self.bo.get_balance(symbol=base_pair)
+                pair_balance = self.bo.get_balance(symbol=base_pair, balance_type='free')
+                self.logger.info(f'Current {base_pair} balance is {pair_balance}')
                 assert pair_balance not in self.bo.error_list
-                if buy_max_limit == 1:
+                if buy_max_limit == (trade_count + 1):
+                    self.logger.info(f'{ticker} is the last. Buy with remaining balance.')
                     quantity = pair_balance * 0.99
+                    if quantity < 100:
+                        self.logger.info(f'Current Quantity for {ticker} is less than 80 $.')
+                        self.alt_trade_data['max_trade_limit'] -= 1
+                        max_trade_limit = self.alt_trade_data['max_trade_limit']
+                        self.logger.info(f'Change Max Trade Limit to {max_trade_limit}')
                 else:
-                    quantity = pair_balance/buy_max_limit
-                buy_max_limit -= 1
-                assert self.bo.buy_at_market(ticker, pair_quantity=quantity) not in self.bo.error_list
+                    quantity = pair_balance / buy_max_limit
+                self.logger.info(f'Buy {ticker} with {quantity}{base_pair}')
+                trade_count += 1
+                assert self.bo.buy_at_market(ticker, pair_quantity=quantity) not in (self.bo.error_list + [False])
                 self.alt_trade_data['trading_alts'][ticker] = deepcopy(self.alt_trade_data['trading_alts_stat'])
             trading_alts = list(self.alt_trade_data['trading_alts'].keys())
             self.logger.info(f'Trading alts is updated to {trading_alts}')
@@ -576,41 +489,6 @@ class BinanceAltDailyTrade:
                 if option in ticker and usdt_condition['not_option']:
                     return False
         return True
-
-    def sell_invalid_alts(self):
-        self.logger.info('Sell invalid alts')
-        btc_base_symbol = self.btc_trade_data['base_symbol']
-
-        if not len(self.alt_trade_data['trading_alts']):
-            self.logger.info('No trading alts. Exit sell invalid alts sequence')
-            return
-
-        trading_alts = list(self.alt_trade_data['trading_alts'].keys())
-        for symbol in trading_alts:
-            ticker, pair = symbol.split('/')
-            trading_alts_stat = deepcopy(self.alt_trade_data['trading_alts_stat'])
-            if pair == 'USDT':
-                btc_symbol = ticker + '/BTC'
-                if self.is_valid_alt(btc_symbol):
-                    self.cancel_trading_alt_orders(symbol)
-                    del self.alt_trade_data['trading_alts'][symbol]
-                    self.alt_trade_data['trading_alts'][btc_symbol] = deepcopy(trading_alts_stat)
-                else:
-                    self.cancel_trading_alt_orders(symbol)
-                    assert self.bo.sell_at_market(symbol) not in self.bo.error_list
-                    assert self.bo.buy_at_market(btc_base_symbol) not in self.bo.error_list
-            elif pair == 'BTC':
-                usdt_symbol = ticker + '/BTC'
-                if self.is_valid_alt(usdt_symbol):
-                    self.cancel_trading_alt_orders(symbol)
-                    del self.alt_trade_data['trading_alts'][symbol]
-                    self.alt_trade_data['trading_alts'][usdt_symbol] = deepcopy(trading_alts_stat)
-                else:
-                    self.cancel_trading_alt_orders(symbol)
-                    assert self.bo.sell_at_market(symbol) not in self.bo.error_list
-                    assert self.bo.sell_at_market(btc_base_symbol) not in self.bo.error_list
-
-        self.logger.info('Sold all invalid alts')
 
     def record_information(self, verbose=True):
         self.logger.info('Record Binance trading bot information')

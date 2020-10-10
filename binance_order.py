@@ -572,7 +572,7 @@ if __name__ == '__main__':
         api_keys = f.readlines()
     api_test = {'api_key': api_keys[0].rstrip('\n'), 'api_secret': api_keys[1]}
     bo = BinanceOrder(api_test['api_key'], api_test['api_secret'])
-    bo.show_basic_info()
+    # bo.show_basic_info()
     # bo.show_basic_market_info()
 
     # Test function
@@ -586,7 +586,7 @@ if __name__ == '__main__':
     # bo.get_order_stat(842733901, 'BTC/USDT')
     # bo.cancel_order('BTC/USDT', 842733901)
     # pprint(bo.cancel_all_order())
-    # pprint(bo.get_balance())
+    pprint(bo.get_balance())
     # pprint(bo.get_orderbook('BTC/USDT'))
     # bo.buy_at_market('FET/BTC')
     # pprint(bo.get_tickers_by_quote('BTC'))
