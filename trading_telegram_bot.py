@@ -15,7 +15,7 @@ while(True):
     log_file_name = 'log/binance_adt_main/binance_adt_main.log.'+yesterday
     if not os.path.exists(log_file_name):
         bot.sendMessage(chat_id=chat_id, text="어제 기록된 로그 파일이 없어. 자러 갈게")
-        sleep(43200)
+        sleep(60*60*24)  # 24 hours
         bot.sendMessage(chat_id=chat_id, text="다시 일을 시작해볼까?")
         continue
     with open(log_file_name, 'r') as log:
@@ -37,4 +37,4 @@ while(True):
         else:
             bot.sendMessage(chat_id=chat_id, text=f"Total balance : {balance} USDT")
             bot.sendMessage(chat_id=chat_id, text="근무 중 이상 무!")
-    sleep(43200)
+    sleep(60*60*24)  # 24 hours
