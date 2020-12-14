@@ -381,6 +381,7 @@ class BinanceAltDailyTrade:
             if last_price <= stop_price:
                 self.logger.info(f'{trading_alt}: Last price is under Pivot s1')
                 self.cancel_trading_alt_orders(trading_alt)
+                sleep(0.3)  # for account state stabilization
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
@@ -388,6 +389,7 @@ class BinanceAltDailyTrade:
             elif prev_close < pivot_price and new_day:
                 self.logger.info(f'{trading_alt}: Previous daily close price is under pivot P')
                 self.cancel_trading_alt_orders(trading_alt)
+                sleep(0.3)  # for account state stabilization
                 assert self.bo.sell_at_market(trading_alt) not in self.bo.error_list
                 del self.alt_trade_data['trading_alts'][trading_alt]
                 self.logger.info(f'{trading_alt} is deleted from trading alts')
