@@ -9,6 +9,7 @@ chat_id = "379055568"
 bot = telegram.Bot(token=chat_token)
 bot.sendMessage(chat_id=chat_id, text="안녕~")
 
+a_week_balance = [0, 0, 0, 0, 0, 0, 0]
 balance = 0
 while(True):
     yesterday = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
@@ -35,6 +36,12 @@ while(True):
             bot.sendMessage(chat_id=chat_id, text="====================")
             bot.sendMessage(chat_id=chat_id, text="문제가 발생해 이를 보고합니다!")
         else:
-            bot.sendMessage(chat_id=chat_id, text=f"Total balance : {balance} USDT")
+            a_week_balance = a_week_balance[1:] + [float(balance)]
+            a_week_balance_non_zero = [daily_balance for daily_balance in a_week_balance if daily_balance]
+            if a_week_balance_non_zero:
+                average_balance = sum(a_week_balance_non_zero) / len(a_week_balance_non_zero)
+            else:
+                average_balance = 0
+            bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Balance : {round(average_balance)} USDT")
             bot.sendMessage(chat_id=chat_id, text="근무 중 이상 무!")
     sleep(60*60*24)  # 24 hours
