@@ -1,4 +1,4 @@
-a = [1,2,3]
-a = a[1:] + [1]
-print(a)
-print(sum(a))
+def foo(a=False, b=True):
+    print(a)
+
+foo('1')

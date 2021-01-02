@@ -203,6 +203,12 @@ class BinanceAltDailyTrade:
                 assert pair_balance not in self.bo.error_list
                 if buy_max_limit == (trade_count + 1):
                     self.logger.info(f'{ticker} is the last. Buy with remaining balance.')
+                    total_balance = self.get_total_balance()
+                    max_order_size = total_balance / buy_max_limit * 1.2
+                    if pair_balance > max_order_size:
+                        self.logger.info(f'Remaining balance{pair_balance} is over (total / n * 1.2). '
+                                         f'Reducing to {max_order_size}')
+                        pair_balance = max_order_size
                     quantity = pair_balance * 0.99
                     if quantity < 100:
                         self.logger.info(f'Current Quantity for {ticker} is less than 80 $.')
@@ -498,27 +504,7 @@ class BinanceAltDailyTrade:
         ticker_info = self.bo.get_ticker_statistics('BTC/USDT', data_update=False)
         assert ticker_info
         btc_price = ticker_info['last_price']
-        usdt_balance = 0
-
-        balance = self.bo.get_balance('BTC')
-        assert balance not in self.bo.error_list
-        usdt_balance += balance * btc_price
-        balance = self.bo.get_balance('USDT')
-        assert balance not in self.bo.error_list
-        usdt_balance += balance
-
-        for trading_alt in self.alt_trade_data['trading_alts']:
-            ticker, pair = trading_alt.split('/')
-            balance = self.bo.get_balance(ticker)
-            assert balance not in self.bo.error_list
-            ticker_info = self.bo.get_ticker_statistics(trading_alt, data_update=False)
-            assert ticker_info
-            last_price = ticker_info['last_price']
-            value = balance * last_price
-            if pair == 'BTC':
-                value *= btc_price
-            usdt_balance += value
-
+        usdt_balance = self.get_total_balance(update=False)
         btc_balance = round(usdt_balance / btc_price, 3)
 
         # save balance data
@@ -543,6 +529,26 @@ class BinanceAltDailyTrade:
         if verbose:
             self.logger.info(f'Estimated Balance in BTC: {btc_balance}')
             self.logger.info(f'Estimated Balance in USDT: {usdt_balance}')
+
+
+    def get_total_balance(self, update=True):
+        if update:
+            assert self.bo.update_ticker_data()
+        usdt_balance = 0
+        balance = self.bo.get_balance('USDT')
+        assert balance not in self.bo.error_list
+        usdt_balance += balance
+
+        for trading_alt in self.alt_trade_data['trading_alts']:
+            ticker, pair = trading_alt.split('/')
+            balance = self.bo.get_balance(ticker)
+            assert balance not in self.bo.error_list
+            ticker_info = self.bo.get_ticker_statistics(trading_alt, data_update=False)
+            assert ticker_info
+            last_price = ticker_info['last_price']
+            value = balance * last_price
+            usdt_balance += value
+        return usdt_balance
 
 
 def setup_logger(name):
