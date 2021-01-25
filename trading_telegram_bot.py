@@ -10,7 +10,7 @@ bot = telegram.Bot(token=chat_token)
 bot.sendMessage(chat_id=chat_id, text="안녕~")
 
 a_week_balance = [0, 0, 0, 0, 0, 0, 0]
-balance = 0
+prev_average_balance = 0
 while(True):
     yesterday = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
     log_file_name = 'log/binance_adt_main/binance_adt_main.log.'+yesterday
@@ -42,6 +42,12 @@ while(True):
                 average_balance = sum(a_week_balance_non_zero) / len(a_week_balance_non_zero)
             else:
                 average_balance = 0
-            bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Balance : {round(average_balance)} USDT")
+            # bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Balance : {round(average_balance)} USDT")
+            if prev_average_balance:
+                change_rate = (average_balance - prev_average_balance) / prev_average_balance
+            else:
+                change_rate = -666
+            bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Change Rate : {round(change_rate, 1)}%")
             bot.sendMessage(chat_id=chat_id, text="근무 중 이상 무!")
+            prev_average_balance = average_balance
     sleep(60*60*24)  # 24 hours
