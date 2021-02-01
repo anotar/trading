@@ -47,7 +47,8 @@ while(True):
                 change_rate = (average_balance - prev_average_balance) / prev_average_balance
             else:
                 change_rate = -666
-            bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Change Rate : {round(change_rate, 1)}%")
+            # this price change rate display function is malfunction.
+            # bot.sendMessage(chat_id=chat_id, text=f"Weekly Average Change Rate : {round(change_rate, 1)}%")
             bot.sendMessage(chat_id=chat_id, text="근무 중 이상 무!")
             prev_average_balance = average_balance
     sleep(60*60*24)  # 24 hours
