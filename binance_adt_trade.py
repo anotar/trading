@@ -25,6 +25,7 @@ class BinanceAltDailyTrade:
         self.trade_thread = threading.Thread()
         self.trade_loop_prev_time = {'alt_trade': 0,
                                      'record': 0,
+                                     'data_update': 0,
                                      }
 
         self.alt_trade_data = {'prev_day': datetime.utcnow().day-1,
@@ -113,6 +114,9 @@ class BinanceAltDailyTrade:
 
         if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
+
+        if self.check_seconds('data_update', 1, time_type='day'):
+            self.update_coin_data()
 
     def alt_trade(self, min_cost=150):
         self.logger.info('Starting Alt Trade...')
@@ -530,7 +534,6 @@ class BinanceAltDailyTrade:
             self.logger.info(f'Estimated Balance in BTC: {btc_balance}')
             self.logger.info(f'Estimated Balance in USDT: {usdt_balance}')
 
-
     def get_total_balance(self, update=True):
         if update:
             assert self.bo.update_ticker_data()
@@ -550,6 +553,31 @@ class BinanceAltDailyTrade:
             usdt_balance += value
         return usdt_balance
 
+    def update_coin_data(self):
+        self.logger.info('Update ALT Coin Deny List')
+        file_name = 'coin_list'
+        record_dir = 'data/Binance/CoinData/'
+        if not os.path.exists(record_dir):
+            raise FileNotFoundError('CoinData Folder is not exist.')
+
+        coin_data = pd.read_csv('{}.csv'.format(record_dir+file_name))
+        stable_list = coin_data['stable_list'].dropna().values.tolist()
+        option_list = coin_data['option_list'].dropna().values.tolist()
+        stable_list = [stable_coin.replace(" ", "") for stable_coin in stable_list]
+        option_list = [option_pair.replace(" ", "") for option_pair in option_list]
+
+        if self.alt_trade_data['stable_list'] == stable_list:
+            self.logger.info("Current stable list is not updated.")
+        else:
+            old_stable_list = self.alt_trade_data['stable_list']
+            self.alt_trade_data['stable_list'] = stable_list
+            self.logger.info(f"Stable list is updated from {old_stable_list} to {stable_list}")
+        if self.alt_trade_data['option_list'] == option_list:
+            self.logger.info("Current option list is not updated.")
+        else:
+            old_option_list = self.alt_trade_data['option_list']
+            self.alt_trade_data['option_list'] = option_list
+            self.logger.info(f"Option list is updated from {old_option_list} to {option_list}")
 
 def setup_logger(name):
     log_dir = f'./log/{name}/'
