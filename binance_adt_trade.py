@@ -109,14 +109,14 @@ class BinanceAltDailyTrade:
             return False
 
     def trade(self):
+        if self.check_seconds('data_update', 1, time_type='day'):
+            self.update_coin_data()
+
         if self.check_seconds('alt_trade', 1, time_type='hour'):
             self.alt_trade()
 
         if self.check_seconds('record', 1, time_type='day'):
             self.record_information()
-
-        if self.check_seconds('data_update', 1, time_type='day'):
-            self.update_coin_data()
 
     def alt_trade(self, min_cost=150):
         self.logger.info('Starting Alt Trade...')
