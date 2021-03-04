@@ -208,7 +208,7 @@ class BinanceAltDailyTrade:
                 if buy_max_limit == (trade_count + 1):
                     self.logger.info(f'{ticker} is the last. Buy with remaining balance.')
                     total_balance = self.get_total_balance()
-                    max_order_size = total_balance / buy_max_limit * 1.2
+                    max_order_size = total_balance / self.alt_trade_data['max_trade_limit'] * 1.2
                     if pair_balance > max_order_size:
                         self.logger.info(f'Remaining balance{pair_balance} is over (total / n * 1.2). '
                                          f'Reducing to {max_order_size}')
@@ -220,7 +220,7 @@ class BinanceAltDailyTrade:
                         max_trade_limit = self.alt_trade_data['max_trade_limit']
                         self.logger.info(f'Change Max Trade Limit to {max_trade_limit}')
                 else:
-                    quantity = pair_balance / buy_max_limit
+                    quantity = pair_balance / (buy_max_limit - trade_count)
                 self.logger.info(f'Buy {ticker} with {quantity}{base_pair}')
                 trade_count += 1
                 assert self.bo.buy_at_market(ticker, pair_quantity=quantity) not in (self.bo.error_list + [False])
