@@ -1,5 +1,3 @@
-a: int = '#asdfasfsadf'
-print(a[1])
-
-if a[0] == "#":
-    print(1)
+from datetime import datetime
+print(type(datetime.utcnow().day))
+print(datetime.utcnow().timestamp())
