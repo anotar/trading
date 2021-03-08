@@ -37,6 +37,20 @@ binanceADT = BinanceAltDailyTrade(api_test['api_key'], api_test['api_secret'])
 
 logger.info('Start Binance Alt Daily Trading')
 binanceADT.start_trade()
-while True:
-    sleep(10)
-
+bot_kill_switch = 0
+while not bot_kill_switch:
+    with open('data/binance/AltDailyTrading/kill_switch.txt', 'r') as kill_switch_txt:
+        kill_switch_texts = kill_switch_txt.readlines()
+        for file_text in kill_switch_texts:
+            if "switch :" in file_text and "#" != file_text[0]:
+                switch_stat = int(file_text.rstrip('\n').rstrip(' ')[-1])
+                if bot_kill_switch != switch_stat:
+                    bot_kill_switch = switch_stat
+                    if bot_kill_switch:
+                        logger.info("Bot kill switch is turned On")
+                        logger.info("Terminating the bot...")
+                        break
+                    else:
+                        logger.info("Bot kill switch is turned Off")
+    sleep(1)
+logger.info("Bot terminated.")

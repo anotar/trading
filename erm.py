@@ -1,4 +1,5 @@
-def foo(a=False, b=True):
-    print(a)
+a: int = '#asdfasfsadf'
+print(a[1])
 
-foo('1')
+if a[0] == "#":
+    print(1)
