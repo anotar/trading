@@ -83,7 +83,7 @@ while telegram_bot_switch:
     yesterday = (datetime.now() - timedelta(1)).strftime('%Y-%m-%d')
     log_file_name = 'log/binance_adt_main/binance_adt_main.log.'+yesterday
 
-    if datetime.utcnow().day != today:
+    if datetime.utcnow().day != today and datetime.utcnow().minute:
         today = datetime.utcnow().day
         if not os.path.exists(log_file_name):
             bot.sendMessage(chat_id=chat_id, text="어제 기록된 로그 파일이 없어. 자러 갈게")
