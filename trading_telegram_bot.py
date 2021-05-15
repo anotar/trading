@@ -30,9 +30,9 @@ def kill_telegram_bot(update, context):
 
 def kill_trading_bot(update, context):
     switch_stat = None
-    with open('data/binance/AltDailyTrading/kill_switch.txt', 'r') as kill_switch_txt:
-        kill_switch_texts = kill_switch_txt.readlines()
-        for file_text in kill_switch_texts:
+    with open('data/Binance/AltDailyTrading/bot_switch.txt', 'r') as bot_switch_txt:
+        bot_switch_texts = bot_switch_txt.readlines()
+        for file_text in bot_switch_texts:
             if "switch :" in file_text and "#" != file_text[0]:
                 switch_stat = int(file_text.rstrip('\n').rstrip(' ')[-1])
                 if switch_stat == 0:
@@ -40,19 +40,19 @@ def kill_trading_bot(update, context):
                 elif switch_stat == 1:
                     bot.sendMessage(chat_id=chat_id, text="트레이딩 봇의 스위치를 내렸어요.")
     if switch_stat:
-        with open('data/binance/AltDailyTrading/kill_switch.txt', 'w') as kill_switch_txt:
-            for file_text in kill_switch_texts:
+        with open('data/Binance/AltDailyTrading/bot_switch.txt', 'w') as bot_switch_txt:
+            for file_text in bot_switch_texts:
                 if "switch :" in file_text and "#" != file_text[0]:
-                    kill_switch_txt.write(file_text.replace('1', '0'))
+                    bot_switch_txt.write(file_text.replace('1', '0'))
                 else:
-                    kill_switch_txt.write(file_text)
+                    bot_switch_txt.write(file_text)
 
 
 def turn_on_trading_bot(update, context):
     switch_stat = None
-    with open('data/binance/AltDailyTrading/kill_switch.txt', 'r') as kill_switch_txt:
-        kill_switch_texts = kill_switch_txt.readlines()
-        for file_text in kill_switch_texts:
+    with open('data/Binance/AltDailyTrading/bot_switch.txt', 'r') as bot_switch_txt:
+        bot_switch_texts = bot_switch_txt.readlines()
+        for file_text in bot_switch_texts:
             if "switch :" in file_text and "#" != file_text[0]:
                 switch_stat = int(file_text.rstrip('\n').rstrip(' ')[-1])
                 if switch_stat == 0:
@@ -60,12 +60,12 @@ def turn_on_trading_bot(update, context):
                 elif switch_stat == 1:
                     bot.sendMessage(chat_id=chat_id, text="이미 트레이딩 봇의 스위치가 켜져있어요")
     if not switch_stat:
-        with open('data/binance/AltDailyTrading/kill_switch.txt', 'w') as kill_switch_txt:
-            for file_text in kill_switch_texts:
+        with open('data/Binance/AltDailyTrading/bot_switch.txt', 'w') as bot_switch_txt:
+            for file_text in bot_switch_texts:
                 if "switch :" in file_text and "#" != file_text[0]:
-                    kill_switch_txt.write(file_text.replace('0', '1'))
+                    bot_switch_txt.write(file_text.replace('0', '1'))
                 else:
-                    kill_switch_txt.write(file_text)
+                    bot_switch_txt.write(file_text)
 
 
 help_handler = CommandHandler('help', help_message)

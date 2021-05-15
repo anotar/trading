@@ -579,6 +579,13 @@ class BinanceAltDailyTrade:
             self.alt_trade_data['option_list'] = option_list
             self.logger.info(f"Option list is updated from {old_option_list} to {option_list}")
 
+        self.logger.info('Update market data')
+        if self.bo.update_market_data():
+            self.logger.info('Market data Updated Successfully.')
+        else:
+            self.logger.info('Market data is not updated.')
+
+
 def setup_logger(name):
     log_dir = f'./log/{name}/'
     if not os.path.exists(log_dir):
