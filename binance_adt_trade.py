@@ -401,6 +401,8 @@ class BinanceAltDailyTrade:
             r2_price = pivot['r2']
             pivot_price = pivot['p']
             stop_price = pivot['s1']
+
+            stop_price = pivot_price * 0.9 if stop_price < pivot_price * 0.9 else stop_price
             stop_limit_price = stop_price * (1 - limit_price_ratio)
 
             ohlcv = self.bo.get_ohlcv(trading_alt, '1d', limit=5)
@@ -410,7 +412,7 @@ class BinanceAltDailyTrade:
             if not trading_alt_stat['total_quantity']:
                 trading_alt_stat['total_quantity'] = ticker_balance
 
-            if last_price <= stop_price:
+            if last_price <= pivot['s1']:
                 self.logger.info(f'{trading_alt}: Last price is under Pivot s1')
                 self.cancel_trading_alt_orders(trading_alt)
                 sleep(0.3)  # for account state stabilization
