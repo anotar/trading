@@ -100,9 +100,12 @@ while telegram_bot_switch:
                     balance = str(round(float(log_line.rstrip('\n').split(" ")[-1]), 1))
             if error_flag:
                 bot.sendMessage(chat_id=chat_id, text="=====ERROR LIST=====")
-                for error_line in error_list[-10:]:
+                for error_line in error_list[:10]:
                     bot.sendMessage(chat_id=chat_id, text=error_line)
+                if len(error_list) > 10:
+                    bot.sendMessage(chat_id=chat_id, text=f"++++ {len(error_list)} more lines ++++")
                 bot.sendMessage(chat_id=chat_id, text="====================")
+
                 bot.sendMessage(chat_id=chat_id, text="문제가 발생해 이를 보고합니다!")
             else:
                 bot.sendMessage(chat_id=chat_id, text="근무 중 이상 무!")
